@@ -1,119 +1,114 @@
 using ClientPlugin.Settings;
 using ClientPlugin.Settings.Elements;
-using Sandbox.Graphics.GUI;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Text;
-using ClientPlugin.Settings.Tools;
-using VRage.Input;
 using VRageMath;
 
 
 namespace ClientPlugin;
 
-public enum ExampleEnum
-{
-    FirstAlpha,
-    SecondBeta,
-    ThirdGamma,
-    AndTheDelta,
-    Epsilon
-}
-
 public class Config : INotifyPropertyChanged
 {
     #region Options
 
-    // TODO: Define your configuration options and their default values
-    private bool toggle = true;
-    private int integer = 2;
-    private float number = 0.1f;
-    private string text = "Default Text";
-    private ExampleEnum dropdown = ExampleEnum.FirstAlpha;
-    private Color color = Color.Cyan;
-    private Color colorWithAlpha = new Color(0.8f, 0.6f, 0.2f, 0.5f);
-    private Binding keybind = new Binding(MyKeys.None);
+    private bool enabled = true;
+    private int puffBudget = 2200;
+    private float darkness = 1f;
+    private float cloudScale = 1f;
+    private bool lightning = true;
+    private Color lightningColor = new Color(197, 122, 250);
+    private Color flashColor = new Color(200, 150, 240);
+    private bool cameraOverlay = true;
+    private bool hideArrivingGrids = true;
+    private float maxDistanceKm = 15f;
+    private float musicDuringJump = 0.2f;
 
     #endregion
 
     #region User interface
 
-    // TODO: Settings dialog title
-    public readonly string Title = "Config Demo";
+    public readonly string Title = "Black Smoke Jump";
 
-    [Separator("Some settings")]
-        
-    // TODO: Settings dialog controls, one property for each configuration option
+    [Separator("Jump effect")]
 
-    [Checkbox(description: "Checkbox Tooltip")]
-    public bool Toggle
+    [Checkbox(description: "Replace the vanilla jump drive effect with the black smoke cloud")]
+    public bool Enabled
     {
-        get => toggle;
-        set => SetField(ref toggle, value);
+        get => enabled;
+        set => SetField(ref enabled, value);
     }
 
-    [Slider(-1f, 10f, 1f, SliderAttribute.SliderType.Integer, description: "Integer Slider Tooltip")]
-    public int Integer
+    [Slider(200f, 3000f, 100f, SliderAttribute.SliderType.Integer, description: "Smoke billboards per cloud, lower it on a slow GPU")]
+    public int PuffBudget
     {
-        get => integer;
-        set => SetField(ref integer, value);
+        get => puffBudget;
+        set => SetField(ref puffBudget, value);
     }
 
-    [Slider(-5f, 4.5f, 0.5f, SliderAttribute.SliderType.Float, description: "Float Slider Tooltip")]
-    public float Number
+    [Slider(0.3f, 1.5f, 0.05f, SliderAttribute.SliderType.Float, description: "Opacity of the smoke")]
+    public float Darkness
     {
-        get => number;
-        set => SetField(ref number, value);
+        get => darkness;
+        set => SetField(ref darkness, value);
     }
 
-    [Textbox(description: "Textbox Tooltip")]
-    public string Text
+    [Slider(0.5f, 4f, 0.1f, SliderAttribute.SliderType.Float, description: "Size of the clouds: bigger clouds can be seen from farther away")]
+    public float CloudScale
     {
-        get => text;
-        set => SetField(ref text, value);
+        get => cloudScale;
+        set => SetField(ref cloudScale, value);
     }
 
-    [Dropdown(description: "Dropdown Tooltip")]
-    public ExampleEnum Dropdown
+    [Checkbox(description: "Lightning inside the cloud")]
+    public bool Lightning
     {
-        get => dropdown;
-        set => SetField(ref dropdown, value);
+        get => lightning;
+        set => SetField(ref lightning, value);
     }
 
-    [Separator("More settings")]
-        
-    [Color(description: "RGB color")]
-    public Color Color
+    [Color(description: "Color of the lightning bolts and sparks")]
+    public Color LightningColor
     {
-        get => color;
-        set => SetField(ref color, value);
+        get => lightningColor;
+        set => SetField(ref lightningColor, value);
     }
 
-    [Color(hasAlpha: true, description: "RGBA color")]
-    public Color ColorWithAlpha
+    [Color(description: "Color of the flashes lighting up the smoke and of its glowing regions")]
+    public Color FlashColor
     {
-        get => colorWithAlpha;
-        set => SetField(ref colorWithAlpha, value);
+        get => flashColor;
+        set => SetField(ref flashColor, value);
     }
 
-    [Keybind(description: "Keybind Tooltip - Unbind by right clicking the button")]
-    public Binding Keybind
+    [Checkbox(description: "Fill the view with smoke when your third person camera is zoomed out beyond the cloud of the jumping ship")]
+    public bool CameraOverlay
     {
-        get => keybind;
-        set => SetField(ref keybind, value);
+        get => cameraOverlay;
+        set => SetField(ref cameraOverlay, value);
     }
 
-    [Button(description: "Button Tooltip")]
-    public void Button()
+    [Checkbox(description: "Hide a ship jumping in near you until its smoke cloud has formed")]
+    public bool HideArrivingGrids
     {
-        MyGuiSandbox.AddScreen(MyGuiSandbox.CreateMessageBox(
-            MyMessageBoxStyleEnum.Info,
-            buttonType: MyMessageBoxButtonsType.OK,
-            messageText: new StringBuilder("You clicked me!"),
-            messageCaption: new StringBuilder("Custom Button Function"),
-            size: new Vector2(0.6f, 0.5f)
-        ));
+        get => hideArrivingGrids;
+        set => SetField(ref hideArrivingGrids, value);
+    }
+
+    [Slider(1f, 50f, 1f, SliderAttribute.SliderType.Float, description: "Clouds farther than this (km) are not drawn")]
+    public float MaxDistanceKm
+    {
+        get => maxDistanceKm;
+        set => SetField(ref maxDistanceKm, value);
+    }
+
+    [Separator("Sound")]
+
+    [Slider(0f, 1f, 0.05f, SliderAttribute.SliderType.Float, description: "The game's music while a jump is heard, as a share of its volume: lower it to hear the gate better")]
+    public float MusicDuringJump
+    {
+        get => musicDuringJump;
+        set => SetField(ref musicDuringJump, value);
     }
 
     #endregion

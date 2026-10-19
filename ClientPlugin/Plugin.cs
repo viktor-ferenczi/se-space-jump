@@ -1,4 +1,5 @@
 ﻿using System.Reflection;
+using ClientPlugin.Effects;
 using ClientPlugin.Settings;
 using ClientPlugin.Settings.Layouts;
 using HarmonyLib;
@@ -16,7 +17,7 @@ namespace ClientPlugin;
 // ReSharper disable once UnusedType.Global
 public class Plugin : IPlugin
 {
-    public const string Name = "ClientPluginTemplate";
+    public const string Name = "BlackSmoke";
     public static Plugin Instance { get; private set; }
     private SettingsGenerator settingsGenerator;
 
@@ -26,22 +27,34 @@ public class Plugin : IPlugin
         Instance = this;
         Instance.settingsGenerator = new SettingsGenerator();
 
-        // TODO: Put your one time initialization code here.
         var harmony = new Harmony(Name);
         harmony.PatchAll(Assembly.GetExecutingAssembly());
     }
 
+    /// <summary>Called by Pulsar with the plugin's asset folder (the AssetFolder asset of BlackSmoke.xml)</summary>
+    // ReSharper disable once UnusedMember.Global
+    public void LoadAssets(string folder)
+    {
+        JumpSounds.AssetFolder = folder;
+        Log.Info($"Assets: {folder}");
+    }
+
     public void Dispose()
     {
-        // TODO: Save state and close resources here, called when the game exits (not guaranteed!)
-        // IMPORTANT: Do NOT call harmony.UnpatchAll() here! It may break other plugins.
-
+        // Do NOT call harmony.UnpatchAll() here! It may break other plugins.
         Instance = null;
     }
 
     public void Update()
     {
-        // TODO: Put your update code here. It is called on every simulation frame!
+        try
+        {
+            JumpEffects.Update();
+        }
+        catch (System.Exception e)
+        {
+            Log.Error(e);
+        }
     }
 
     // ReSharper disable once UnusedMember.Global
@@ -51,9 +64,4 @@ public class Plugin : IPlugin
         MyGuiSandbox.AddScreen(Instance.settingsGenerator.Dialog);
     }
 
-    //TODO: Uncomment and use this method to load asset files
-    /*public void LoadAssets(string folder)
-    {
-
-    }*/
 }
