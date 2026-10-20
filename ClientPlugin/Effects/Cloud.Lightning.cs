@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using VRage.Game;
 using VRageMath;
 using VRageRender;
@@ -9,7 +8,7 @@ namespace ClientPlugin.Effects;
 // The discharges in the fog: lightning, flashes and sparks
 public sealed partial class Cloud
 {
-    private float LightningIntensity(double now)
+    public float LightningIntensity(double now)
     {
         switch (Kind)
         {
@@ -23,21 +22,6 @@ public sealed partial class Cloud
                 return 1f - SmoothStep((float)(now - StartedAt - 0.5) / 4.5f);
             default:
                 return 0.6f * (1f - SmoothStep((float)(now - StartedAt) / 3f));
-        }
-    }
-
-    /// <summary>0..1, lightning in the cloud right now, flashes the overlay of a camera inside it</summary>
-    public float Flash
-    {
-        get
-        {
-            var flash = 0f;
-            foreach (var bolt in bolts)
-                flash += bolt.Brightness;
-            var now = lastDrawAt;
-            foreach (var patch in flashes)
-                flash += 0.5f * patch.Brightness(now);
-            return Math.Min(1f, flash * 0.35f);
         }
     }
 
@@ -217,29 +201,6 @@ public sealed partial class Cloud
         }
     }
 
-    private sealed class FlashPatch
-    {
-        // Frame space: an origin patch moves with the ship
-        public Vector3D Local;
-        public float Radius;
-        public float Peak;
-        public float Phase;
-        public double StartsAt;
-        public double EndsAt;
-
-        public float Brightness(double now)
-        {
-            var age = (float)(now - StartsAt);
-            var left = (float)(EndsAt - now);
-            if (age < 0 || left < 0)
-                return 0f;
-
-            var envelope = Math.Min(1f, age / 0.08f) * Math.Min(1f, left / (float)(EndsAt - StartsAt) * 1.5f);
-            var flicker = 0.7f + 0.3f * (float)Math.Sin(age * 23f + Phase);
-            return Peak * envelope * flicker;
-        }
-    }
-
     /// <summary>Occasional sparks shooting out of the smoke</summary>
     private void UpdateSparks(double now, double dt)
     {
@@ -296,86 +257,19 @@ public sealed partial class Cloud
         public double StartsAt;
         public double EndsAt;
 
-        public void Draw(double now)
+        public void Draw(double now, float fade)
         {
             var speed = Velocity.Length();
             if (speed < 1e-3)
                 return;
 
-            var fade = 1f - SmoothStep((float)((now - StartsAt) / (EndsAt - StartsAt)));
-            var alpha = 0.55f * fade;
+            var alpha = 0.55f * (1f - SmoothStep((float)((now - StartsAt) / (EndsAt - StartsAt)))) * fade;
             if (alpha < 0.01f)
                 return;
 
             // The texture's bright head at the line's origin, its tail fading out behind it
             var direction = (Vector3)(-Velocity / speed);
             MyTransparentGeometry.AddLineBillboard(SparkMaterial, new Vector4(Color * alpha, alpha), Head, direction, Length, Thickness, MyBillboard.BlendTypeEnum.Standard);
-        }
-    }
-
-    private sealed class Bolt
-    {
-        private readonly Vector3D[] points;
-        private readonly float thickness;
-        public readonly float Brightness;
-        public readonly double EndsAt;
-        public readonly Vector3D Middle;
-        public readonly double Reach;
-
-        public Bolt(Vector3D[] points, float thickness, float brightness, double endsAt, double reach)
-        {
-            this.points = points;
-            this.thickness = thickness;
-            Brightness = brightness;
-            EndsAt = endsAt;
-            Middle = points[points.Length / 2];
-            Reach = reach;
-        }
-
-        /// <summary>Midpoint displacement: a jagged line from a to b</summary>
-        public static Vector3D[] Jagged(Vector3D a, Vector3D b, Random random)
-        {
-            var points = new List<Vector3D> { a, b };
-            var offset = Vector3D.Distance(a, b) * 0.25;
-            for (var level = 0; level < 3; level++)
-            {
-                var next = new List<Vector3D>(points.Count * 2);
-                for (var i = 0; i < points.Count - 1; i++)
-                {
-                    var middle = (points[i] + points[i + 1]) * 0.5;
-                    var jitter = new Vector3D(random.NextDouble() - 0.5, random.NextDouble() - 0.5, random.NextDouble() - 0.5) * (2 * offset);
-                    next.Add(points[i]);
-                    next.Add(middle + jitter);
-                }
-
-                next.Add(points[points.Count - 1]);
-                points = next;
-                offset *= 0.5;
-            }
-
-            return points.ToArray();
-        }
-
-        public void Draw(Random random, ref Vector3 boltColor, ref Vector3 haloColor)
-        {
-            // Flicker
-            var flicker = (float)(0.4 + random.NextDouble() * 0.6) * Brightness;
-            var coreAlpha = BoltAlpha * flicker;
-            var haloAlpha = BoltHaloAlpha * flicker;
-            var core = new Vector4(boltColor * coreAlpha, coreAlpha);
-            var halo = new Vector4(haloColor * haloAlpha, haloAlpha);
-            for (var i = 0; i < points.Length - 1; i++)
-            {
-                var delta = points[i + 1] - points[i];
-                var length = (float)delta.Length();
-                if (length < 1e-3f)
-                    continue;
-
-                // Thin core and a faint halo around it
-                var direction = (Vector3)(delta / length);
-                MyTransparentGeometry.AddLineBillboard(BoltMaterial, core, points[i], direction, length, thickness, MyBillboard.BlendTypeEnum.Standard);
-                MyTransparentGeometry.AddLineBillboard(BoltMaterial, halo, points[i], direction, length, thickness * 5f, MyBillboard.BlendTypeEnum.Standard);
-            }
         }
     }
 }

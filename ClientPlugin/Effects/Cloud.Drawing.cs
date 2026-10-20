@@ -8,7 +8,8 @@ namespace ClientPlugin.Effects;
 public sealed partial class Cloud
 {
     /// <summary>Draws the cloud and multiplies the transmittance of the view from the camera towards the sun through it</summary>
-    public void Draw(double now, Vector3D cameraPosition, Vector3D sunDirection, float darkness, bool lightning, double maxDistance, ref float sunTransmittance)
+    /// <param name="visibility">0..1, how much of it shows: less for a camera wrapped in its own <see cref="CameraCloud"/></param>
+    public void Draw(double now, Vector3D cameraPosition, Vector3D sunDirection, float darkness, bool lightning, double maxDistance, float visibility, ref float sunTransmittance)
     {
         if (Shape == null || !Started || Finished)
             return;
@@ -98,6 +99,10 @@ public sealed partial class Cloud
             var glow = (puff.Hull ? hullLight : 1f) * Glow(world, now) * FlashGlow * (1f - BehindShip(world)) * NearCamera(world, cameraPosition);
             var color = SmokeColor + (glow + abortFlash) * flashTint;
             var angle = puff.Angle + puff.Spin * (float)time;
+            alpha *= visibility;
+            if (alpha < 0.003f)
+                continue;
+
             MyTransparentGeometry.AddPointBillboard(Materials[puff.Material], new Vector4(color * alpha, Math.Min(alpha, 1f)), world, radius, angle);
 
             if (puff.Hull && shroud > 0.01f)
@@ -109,20 +114,20 @@ public sealed partial class Cloud
         }
 
         sunTransmittance *= (float)transmittance;
+        if (visibility < 0.003f)
+            return;
 
         if (shroud > 0.01f)
-            DrawFrontShroud(now, cameraPosition, shroud, flashTint);
+            DrawFrontShroud(now, cameraPosition, shroud * visibility, flashTint);
 
-        var boltColor = Palette.Lightning * BoltBrightness;
-        var haloColor = Palette.Lightning * BoltHaloBrightness;
         foreach (var bolt in bolts)
         {
             if (BehindShip(bolt.Middle) < 0.5f)
-                bolt.Draw(random, ref boltColor, ref haloColor);
+                bolt.Draw(random, visibility);
         }
 
         foreach (var spark in sparks)
-            spark.Draw(now);
+            spark.Draw(now, visibility);
     }
 
     /// <summary>

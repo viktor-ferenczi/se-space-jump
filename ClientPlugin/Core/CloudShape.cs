@@ -53,7 +53,6 @@ public sealed class CloudSettings
     public float LeakShare = 0.12f;
 
     public float MinRadius = 0.6f;
-    public float MaxRadius = 14f;
     public float FlowSpeed = 6f;
 }
 
@@ -144,8 +143,10 @@ public sealed class CloudShape
         var portalRadius = (LocalBox.HalfExtents.Length() * settings.BubbleScale + settings.BubbleMargin) * settings.Scale;
         BubbleSemiAxes = new Vector3D(portalRadius);
 
-        var largest = portalRadius;
-        var maxRadius = (float)Math.Max(settings.MinRadius * 2, Math.Min(settings.MaxRadius * settings.Scale, largest * 0.22));
+        // The puffs grow with the portal, so a big ship's cloud is as dense as a small one's. The small puffs are favoured
+        // (see the acceptance below) up to a size that grows with the ship's own portal, not with the cloud size setting
+        var maxRadius = (float)Math.Max(settings.MinRadius * 2, portalRadius * 0.22);
+        var typical = Math.Max(settings.MinRadius * 3.0, portalRadius / settings.Scale * 0.0625);
         var leaks = (int)(settings.PuffBudget * settings.LeakShare);
         var budget = settings.PuffBudget - leaks;
         var mainMap = maps[0].Map;
@@ -177,7 +178,7 @@ public sealed class CloudShape
                 continue;
 
             var radius = Math.Min(allowed, maxRadius * (0.55f + 0.45f * (float)random.NextDouble()));
-            var acceptance = Math.Min(1.0, Math.Max(0.06, Math.Pow(settings.MinRadius * 3.0 / radius, 1.3)));
+            var acceptance = Math.Min(1.0, Math.Max(0.06, Math.Pow(typical / radius, 1.3)));
             if (!near && random.NextDouble() > acceptance)
                 continue;
 

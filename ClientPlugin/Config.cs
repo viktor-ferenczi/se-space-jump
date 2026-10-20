@@ -81,7 +81,7 @@ public class Config : INotifyPropertyChanged
         set => SetField(ref flashColor, value);
     }
 
-    [Checkbox(description: "Fill the view with smoke when your third person camera is zoomed out beyond the cloud of the jumping ship")]
+    [Checkbox(description: "Wrap your third person camera in smoke while your ship jumps, so nothing outside the cloud shows")]
     public bool CameraOverlay
     {
         get => cameraOverlay;

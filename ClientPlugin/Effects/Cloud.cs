@@ -31,14 +31,13 @@ public sealed partial class Cloud
     private static MyStringId[] materials;
     private static MyStringId[] Materials => materials ??= Array.ConvertAll(MaterialSources, UnlitMaterials.Get);
 
-    private static readonly MyStringId BoltMaterial = MyStringId.GetOrCompute("WeaponLaser");
     private static readonly MyStringId SparkMaterial = MyStringId.GetOrCompute("WhiteSpark");
 
     // Opacity of one puff: the cloud's density comes from the overlap of many
-    private const float PuffOpacity = 0.75f;
+    internal const float PuffOpacity = 0.75f;
 
     // Smoke color, premultiplied by alpha when drawn: black, lit only where a discharge flashes (the flash color)
-    private static readonly Vector3 SmokeColor = new Vector3(0.003f, 0.0025f, 0.004f);
+    internal static readonly Vector3 SmokeColor = new Vector3(0.003f, 0.0025f, 0.004f);
 
     // The exit is bigger than the entrance: the portal's outer fog moves out this much more within the first second
     private const float ExitGrowth = 0.35f;
@@ -63,7 +62,7 @@ public sealed partial class Cloud
     private const float SunOcclusion = 1.6f;
 
     // How bright a discharge lights the fog around it (HDR, times the flash color): a lighter purple region
-    private const float FlashGlow = 2.5f;
+    internal const float FlashGlow = 2.5f;
 
     // Light of a discharge at the hull on the fog in front of the ship (additive, two layers)
     private const float FrontGlow = 1.5f;
@@ -97,11 +96,6 @@ public sealed partial class Cloud
     private const double DepartureClosingDelay = 1.0;
     private const double ExitClosingDelay = 1.5;
 
-    // HDR colors, unpremultiplied: the bolt covers little (low alpha) but is bright where it is
-    private const float BoltBrightness = 30f;
-    private const float BoltAlpha = 0.3f;
-    private const float BoltHaloBrightness = 5f;
-    private const float BoltHaloAlpha = 0.07f;
     private const float SparkBrightness = 9f;
     private static readonly Vector3 SparkWhite = new Vector3(7f, 7f, 9f);
 
@@ -513,20 +507,20 @@ public sealed partial class Cloud
         }
     }
 
-    /// <summary>How much of the cloud has formed around a camera that jumps with the ship, for its smoke overlay</summary>
-    public float OverlayIntensity(double now)
+    /// <summary>How much of the cloud has formed around a camera that jumps with the ship, for its <see cref="CameraCloud"/></summary>
+    public float CameraCloudIntensity(double now)
     {
         if (!Started || Finished)
             return 0f;
 
         // Torn apart with the cloud
         if (Aborted)
-            return Kind == CloudKind.Origin ? FormingOverlay(abortedAt) * (1f - SmoothStep((float)(now - abortedAt) / 0.8f)) : 0f;
+            return Kind == CloudKind.Origin ? FormingAround(abortedAt) * (1f - SmoothStep((float)(now - abortedAt) / 0.8f)) : 0f;
 
         switch (Kind)
         {
             case CloudKind.Origin:
-                return Detached ? 0f : FormingOverlay(now);
+                return Detached ? 0f : FormingAround(now);
             case CloudKind.Destination:
                 return 1f - SmoothStep((float)((now - StartedAt - 0.6) / 4.0));
             default:
@@ -534,17 +528,7 @@ public sealed partial class Cloud
         }
     }
 
-    private float FormingOverlay(double now) => SmoothStep((float)((now - (JumpAt - 5.5)) / 4.5));
-
-    /// <summary>0 for a camera inside the cloud's bubble (the cloud hides its view), 1 well outside of it</summary>
-    public float OutsideFactor(Vector3D world)
-    {
-        if (Shape == null)
-            return 0f;
-
-        var local = Vector3D.Transform(world, MatrixD.Invert(frame));
-        return SmoothStep((float)((Shape.BubbleRadius(local) - 0.85) / 0.35));
-    }
+    private float FormingAround(double now) => SmoothStep((float)((now - (JumpAt - 5.5)) / 4.5));
 
     private static float SmoothStep(float x)
     {

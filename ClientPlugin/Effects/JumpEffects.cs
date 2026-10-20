@@ -15,7 +15,7 @@ namespace ClientPlugin.Effects;
 
 /// <summary>
 /// Owns the clouds: starts them from the jump drive events, hides grids that jump in next to this client
-/// until their cloud has formed, draws everything and the camera overlay of a camera that jumps along.
+/// until their cloud has formed, draws everything and the cloud around a third person camera that jumps along.
 /// </summary>
 public static class JumpEffects
 {
@@ -526,27 +526,36 @@ public static class JumpEffects
             var config = Config.Current;
             var camera = CameraPosition;
             var sunDirection = (Vector3D)MySector.SunProperties.SunDirectionNormalized;
-            var overlay = 0f;
-            Cloud overlayCloud = null;
+            var wrapped = 0f;
+            Cloud wrappingCloud = null;
             foreach (var cloud in Clouds)
             {
-                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, ref target);
+                if (Log.DebugEnabled && cloud.Kind == CloudKind.Origin && now - lastWrapLogAt >= 0.25)
+                {
+                    lastWrapLogAt = now;
+                    Log.Debug($"Camera cloud: third person jumping along {ThirdPersonJumpsWith(cloud)}, open air {cloud.IsOpenAt(camera)}, intensity {cloud.CameraCloudIntensity(now):0.00}, {Vector3D.Distance(camera, cloud.Center):0} m from the cloud's centre at t{now - cloud.JumpAt:+0.00;-0.00}");
+                }
+
                 if (config.CameraOverlay && cloud.Kind != CloudKind.Provisional && ThirdPersonJumpsWith(cloud) && cloud.IsOpenAt(camera))
                 {
-                    var intensity = cloud.OverlayIntensity(now) * cloud.OutsideFactor(camera);
-                    if (intensity > overlay)
+                    var intensity = cloud.CameraCloudIntensity(now);
+                    if (intensity > wrapped)
                     {
-                        overlay = intensity;
-                        overlayCloud = cloud;
+                        wrapped = intensity;
+                        wrappingCloud = cloud;
                     }
                 }
             }
 
-            overlay *= Math.Min(1f, config.Darkness);
-            if (overlay > 0.005f)
-                Overlay.Draw(overlay, overlayCloud.Flash, now);
+            // A camera wrapped in its own cloud sees nothing outside it, the other clouds neither
+            foreach (var cloud in Clouds)
+                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, 1f - wrapped, ref target);
+
+            wrapped *= Math.Min(1f, config.Darkness);
+            if (wrapped > 0.005f)
+                CameraCloud.Draw(camera, wrapped, config.Lightning ? wrappingCloud.LightningIntensity(now) : 0f, now);
             else
-                Overlay.Clear();
+                CameraCloud.Clear();
 
             // The estimate counts puffs as discs of their own opacity; in optical depth (-ln of the transmittance) the
             // light fog of the first seconds is below 1, the formed cloud 15-20. The sky still shows through that, and so
@@ -559,13 +568,13 @@ public static class JumpEffects
             var gone = MathHelper.Clamp((depth - 20f) / 20f, 0f, 1f);
             var x2 = (1f - 0.15f * dim * dim * (3f - 2f * dim)) * (1f - gone * gone * (3f - 2f * gone)) * (1f - TransitHidesSun(CameraJumpTime(now)));
 
-            // A camera wrapped in the overlay is in the fog dimension: no sun there at all
-            var y = MathHelper.Clamp(overlay / 0.5f, 0f, 1f);
+            // A camera wrapped in its own cloud is in the fog dimension: no sun there at all
+            var y = MathHelper.Clamp(wrapped / 0.5f, 0f, 1f);
             target = x2 * (1f - y * y * (3f - 2f * y));
         }
         else
         {
-            Overlay.Clear();
+            CameraCloud.Clear();
         }
 
         // The sun disappears quickly into a cloud and comes back slowly, without flickering from one frame to the next
@@ -597,6 +606,7 @@ public static class JumpEffects
     private static double lastDrawAt;
     private static double lastUpdateAt = double.NaN;
     private static double lastSunLogAt;
+    private static double lastWrapLogAt;
     private static bool cameraMarkersOut;
 
     public static void Reset()
@@ -617,7 +627,7 @@ public static class JumpEffects
         lastUpdateAt = double.NaN;
         Origins.Clear();
         Arrivals.Clear();
-        Overlay.Clear();
+        CameraCloud.Clear();
         SunVisibility = 1f;
         session = null;
     }
@@ -627,10 +637,10 @@ public static class JumpEffects
     #region Camera
 
     /// <summary>
-    /// The edge case the overlay is for: the third person camera of a ship controller on the jumping grid group. Zoomed
-    /// out beyond the cloud it would not be hidden by it, yet it jumps with the ship; Cloud.OutsideFactor fades the overlay
-    /// in as the camera leaves the cloud. Every other view (first person, camera blocks, third person close in) is inside
-    /// or behind the ship's own cloud, which masks the jump; the spectator and cameras elsewhere are observers.
+    /// The camera that gets a <see cref="CameraCloud"/>: the third person camera of a ship controller on the jumping grid
+    /// group. It jumps with the ship but can be anywhere around it, outside the ship's cloud or where that cloud is thin.
+    /// Every other view of the ship (first person, camera blocks) is inside or behind the ship's own cloud, which masks
+    /// the jump; the spectator and cameras elsewhere are observers.
     /// </summary>
     private static bool ThirdPersonJumpsWith(Cloud cloud)
     {
