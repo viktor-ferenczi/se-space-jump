@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <PluginData xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:type="GitHubPlugin">
     <Id>5F00E9A7-B436-461E-90AA-E3AD577D58A4</Id>
-    <RepoId>TODO-owner/BlackSmoke</RepoId>
+    <RepoId>viktor-ferenczi/se-space-jump</RepoId>
     <FriendlyName>Black Smoke Jump</FriendlyName>
     <Author>TODO</Author>
     <Tooltip>Replaces the jump drive effect with a black smoke teleport</Tooltip>
