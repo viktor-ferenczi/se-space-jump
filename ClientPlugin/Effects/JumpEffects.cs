@@ -551,6 +551,31 @@ public static class JumpEffects
             foreach (var cloud in Clouds)
                 cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, 1f - wrapped, ref target);
 
+            // A camera inside a cloud (a cockpit, a camera block, the hangar, anyone standing in it) sees nothing outside
+            // the smoke either. The third person camera wrapped in its own cloud has a backdrop of its own
+            var forward = MySector.MainCamera.WorldMatrix.Forward;
+            var inside = 0f;
+            var insideDistance = 0.0;
+            foreach (var cloud in Clouds)
+            {
+                var density = cloud.InsideDensity(camera, forward, now, out var distance);
+                if (density > inside)
+                {
+                    inside = density;
+                    insideDistance = distance;
+                }
+            }
+
+            var backdrop = Backdrop.Opacity(inside * (1f - wrapped) * Math.Min(1f, config.Darkness));
+            if (backdrop > 0.003f)
+                Backdrop.Draw(Math.Max(Math.Max(insideDistance, CameraGridFarSide(camera, forward)), MinBackdropDistance), backdrop);
+
+            if (Log.DebugEnabled && (inside > 0f || wrapped > 0f) && now - lastBackdropLogAt >= 0.25)
+            {
+                lastBackdropLogAt = now;
+                Log.Debug($"Backdrop: inside a cloud {inside:0.00}, opacity {backdrop:0.00} at {insideDistance:0} m; camera cloud {wrapped:0.00} at t{CameraJumpTime(now):+0.00;-0.00}");
+            }
+
             wrapped *= Math.Min(1f, config.Darkness);
             if (wrapped > 0.005f)
                 CameraCloud.Draw(camera, wrapped, config.Lightning ? wrappingCloud.LightningIntensity(now) : 0f, now);
@@ -570,7 +595,7 @@ public static class JumpEffects
 
             // A camera wrapped in its own cloud is in the fog dimension: no sun there at all
             var y = MathHelper.Clamp(wrapped / 0.5f, 0f, 1f);
-            target = x2 * (1f - y * y * (3f - 2f * y));
+            target = x2 * (1f - y * y * (3f - 2f * y)) * (1f - backdrop);
         }
         else
         {
@@ -607,7 +632,11 @@ public static class JumpEffects
     private static double lastUpdateAt = double.NaN;
     private static double lastSunLogAt;
     private static double lastWrapLogAt;
+    private static double lastBackdropLogAt;
     private static bool cameraMarkersOut;
+
+    // The backdrop of a camera inside a cloud is never nearer than this
+    private const double MinBackdropDistance = 8;
 
     public static void Reset()
     {
@@ -671,6 +700,16 @@ public static class JumpEffects
         }
 
         return false;
+    }
+
+    /// <summary>How far along the view direction the camera's grid reaches (its bounding sphere's far side), 0 without one</summary>
+    private static double CameraGridFarSide(Vector3D camera, Vector3D forward)
+    {
+        if (CameraGridId() is not long id || !MyEntities.TryGetEntityById(id, out var grid))
+            return 0;
+
+        var sphere = grid.PositionComp.WorldVolume;
+        return Vector3D.Dot(sphere.Center - camera, forward) + sphere.Radius;
     }
 
     /// <summary>Whether the grid of the camera (the seat's or camera block's ship) reaches into a sphere</summary>

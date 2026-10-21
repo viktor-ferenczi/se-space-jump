@@ -528,6 +528,56 @@ public sealed partial class Cloud
         }
     }
 
+    /// <summary>
+    /// How dense the smoke is around a camera inside the portal, 0..1, for the <see cref="Backdrop"/> behind it, and how
+    /// far along the view direction the backdrop goes: past the portal's far side, so the ship and the whole cloud stay
+    /// in front of it. 0 for a camera outside the portal, which sees the cloud from outside.
+    /// </summary>
+    public float InsideDensity(Vector3D camera, Vector3D forward, double now, out double distance)
+    {
+        distance = 0;
+        if (Shape == null || !Started || Finished)
+            return 0f;
+
+        // The exit's outer fog moves out in its first second (Evaluate)
+        var radius = Shape.BubbleSemiAxes.X * (Kind == CloudKind.Origin ? 1f : 1f + ExitGrowth * SmoothStep((float)(now - StartedAt) / 0.8f));
+        var toCenter = Center - camera;
+        var inside = 1f - SmoothStep((float)((toCenter.Length() / radius - 0.8) / 0.25));
+        if (inside <= 0f)
+            return 0f;
+
+        distance = Vector3D.Dot(toCenter, forward) + radius;
+        return inside * Formed(now);
+    }
+
+    /// <summary>0..1, how far the smoke has formed, following the puffs' opacity over the cloud's life (Evaluate)</summary>
+    private float Formed(double now)
+    {
+        if (Aborted)
+            return Kind == CloudKind.Origin ? FormingAround(abortedAt) * (1f - SmoothStep((float)(now - abortedAt) / 0.8f)) : 0f;
+
+        var age = (float)(now - StartedAt);
+        float formed;
+        switch (Kind)
+        {
+            case CloudKind.Origin:
+                formed = Detached ? FormingAround(detachedAt) * (1f - SmoothStep((float)(now - detachedAt - 0.6) / 3.5f)) : FormingAround(now);
+                break;
+            case CloudKind.Destination:
+                formed = (seamless ? 1f : SmoothStep(age / 0.25f)) * (1f - SmoothStep((age - 0.6f) / 4.0f));
+                if (!double.IsNaN(takeOverAt) && !natural)
+                    formed *= SmoothStep((float)(now - takeOverAt) / TakeOverFadeSeconds);
+                break;
+            default:
+                formed = SmoothStep(age / 0.3f) * (double.IsNaN(fadeAt) ? 1f - SmoothStep((age - 8f) / 3f) : 1f - SmoothStep((float)(now - fadeAt - fadeVisualDelay) / 0.45f));
+                break;
+        }
+
+        if (!double.IsNaN(fadeAt) && Kind != CloudKind.Provisional)
+            formed *= 1f - SmoothStep((float)(now - fadeAt) / 2f);
+        return formed;
+    }
+
     private float FormingAround(double now) => SmoothStep((float)((now - (JumpAt - 5.5)) / 4.5));
 
     private static float SmoothStep(float x)
