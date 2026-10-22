@@ -12,7 +12,8 @@ namespace ClientPlugin.Effects;
 /// mixed into the smoke's colour however dense the smoke in front of it, and the glares of lights and thrusters are drawn
 /// on top of everything, tested only against the opaque scene. While a cloud hides its ship, the flames and glares of
 /// the ship's thrusters and of its lights in open air (not those in sealed rooms) fade as the ship disappears; for a
-/// camera inside the smoke every glare beyond the backdrop closing its view fades with the backdrop. Built on the main
+/// camera inside the smoke every glare beyond the backdrop closing its view fades with the backdrop, and in the fog of a
+/// third person camera (see CameraCloud) every flame and glare fades with its distance, its own ship's too. Built on the main
 /// thread every frame, read by the render thread (see CoverPatches): the snapshot is replaced, never changed.
 /// </summary>
 public static class Cover
@@ -37,6 +38,7 @@ public static class Cover
         public Vector3D Camera;
         public double BeyondSquared = double.MaxValue;
         public float BeyondKeep = 1f;
+        public float Fog;
     }
 
     private static volatile Snapshot current = new Snapshot();
@@ -59,20 +61,24 @@ public static class Cover
 
         if (snapshot.BeyondKeep < 1f && Vector3D.DistanceSquared(position, snapshot.Camera) >= snapshot.BeyondSquared)
             keep *= snapshot.BeyondKeep;
+        if (snapshot.Fog > 0f)
+            keep *= CameraCloud.Transmission(Vector3D.Distance(position, snapshot.Camera), snapshot.Fog);
         return keep;
     }
 
-    public static bool Active => current.Places.Length != 0 || current.BeyondKeep < 1f;
+    public static bool Active => current.Places.Length != 0 || current.BeyondKeep < 1f || current.Fog > 0f;
 
     /// <summary>Main thread, every frame the clouds are drawn</summary>
+    /// <param name="inFog">The cloud whose ship is in the camera's fog with it, null for none: it does not cover its ship</param>
+    /// <param name="fog">For a third person camera in its fog: 0..1, how far that has formed (see CameraCloud)</param>
     /// <param name="beyond">For a camera inside the smoke: how far its backdrop is</param>
     /// <param name="beyondKeep">0..1, how much is left beyond it of what the backdrop hides</param>
-    public static void Update(List<Cloud> clouds, double now, Vector3D camera, double beyond, float beyondKeep)
+    public static void Update(List<Cloud> clouds, double now, Vector3D camera, Cloud inFog, float fog, double beyond, float beyondKeep)
     {
         Building.Clear();
         foreach (var cloud in clouds)
         {
-            var cover = cloud.ShipCover(now);
+            var cover = cloud == inFog ? 0f : cloud.ShipCover(now);
             if (cover <= 0.001f)
                 continue;
 
@@ -102,6 +108,7 @@ public static class Cover
             Camera = camera,
             BeyondSquared = beyondKeep < 1f ? beyond * beyond : double.MaxValue,
             BeyondKeep = beyondKeep,
+            Fog = fog,
         };
     }
 

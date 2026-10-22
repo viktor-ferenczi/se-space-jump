@@ -11,16 +11,22 @@ namespace ClientPlugin.Effects;
 /// </summary>
 public static class UnlitMaterials
 {
-    public static MyStringId Get(string source)
+    public static MyStringId Get(string source) => Get(source, 0f);
+
+    /// <param name="softness">
+    /// When above 0, the billboard's soft particle distance scale: it fades out over 0.3 times this many metres in front of
+    /// the opaque scene, so where it cuts through the hull it leaves no edge
+    /// </param>
+    public static MyStringId Get(string source, float softness)
     {
-        var id = MyStringId.GetOrCompute($"{Plugin.Name}_{source}");
+        var id = MyStringId.GetOrCompute(softness > 0f ? $"{Plugin.Name}_{source}_Soft{softness:0.##}" : $"{Plugin.Name}_{source}");
         if (MyTransparentMaterials.ContainsMaterial(id))
             return id;
 
         if (!MyTransparentMaterials.TryGetMaterial(MyStringId.GetOrCompute(source), out var m))
             return MyStringId.GetOrCompute(source);
 
-        MyTransparentMaterials.AddMaterial(new MyTransparentMaterial(id, m.TextureType, m.Texture, m.GlossTexture, m.SoftParticleDistanceScale,
+        MyTransparentMaterials.AddMaterial(new MyTransparentMaterial(id, m.TextureType, m.Texture, m.GlossTexture, softness > 0f ? softness : m.SoftParticleDistanceScale,
             false, m.AlphaMistingEnable, m.Color, m.ColorAdd, m.ShadowMultiplier, m.LightMultiplier, m.IsFlareOccluder, m.TriangleFaceCulling,
             m.UseAtlas, m.AlphaMistingStart, m.AlphaMistingEnd, m.AlphaSaturation, m.Reflectivity, m.AlphaCutout, m.TargetSize, m.Fresnel,
             m.ReflectionShadow, m.Gloss, m.GlossTextureAdd, m.SpecularColorFactor)

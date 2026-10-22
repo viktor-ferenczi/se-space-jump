@@ -10,13 +10,14 @@ namespace ClientPlugin.Effects;
 
 /// <summary>
 /// The cloud around a third person camera that jumps with the ship. The camera can be anywhere around the ship, often
-/// outside its cloud or where that cloud is thin (a big ship's cloud is wide), so it gets a cloud of its own: a shell of
-/// the same black smoke around the camera, with lightning, hiding everything outside it, and the other clouds are not
-/// drawn for it. Smoke billboards are depth tested, so what is close to the camera (the hull of the ship in a close third
-/// person view) can only be hidden by the puffs in front of it: a dense shell of them close around the camera, the only
-/// ones the lightning lights up much. The puffs farther out stay as dark as the hull, so the lit smoke behind it never
-/// shows its outline. It moves with the camera and keeps its orientation in the world, so it turns past the view when
-/// the camera turns.
+/// outside its cloud or where that cloud is thin (a big ship's cloud is wide), so it gets a cloud of its own: the same
+/// black smoke around the camera, with lightning, and the other clouds are not drawn for it. The camera goes into the fog
+/// with the ship, so what is near it, the ship itself above all, shows through the smoke and fades into it with distance:
+/// uniform dark layers facing the camera, one every FogStep, each fading in softly in front of what it covers (no edge
+/// where it cuts through the hull), take the light of anything at a distance d down to exp(-d / FogLength). Behind the
+/// last of them the opaque Backdrop closes the view: nothing outside the cloud shows. Wisps of smoke drift in the fog,
+/// lit by the discharges near the camera. They move with the camera and keep their orientation in the world, so they turn
+/// past the view when the camera turns.
 /// </summary>
 public static class CameraCloud
 {
@@ -25,30 +26,32 @@ public static class CameraCloud
     private const float Hollow = 3f;
     private const int PuffCount = 420;
 
-    // A third of them close around the camera, in front of anything near it
+    // A third of them close around the camera, the ones the flashes light
     private const int NearCount = PuffCount / 3;
     private const float NearFrom = 1.5f;
     private const float NearTo = 5f;
 
-    // As dense as the ship's cloud when it is formed (Cloud.CoverDensity)
-    private const float Density = 2.2f;
+    // The wisps are thin: the fog takes the light with distance, the wisps only show the smoke moving. The flashes light
+    // the near ones brighter for it
+    private const float Density = 0.45f;
+    private const float FlashBoost = 2f;
 
-    // How much the bolts light the puffs farther out than the near shell (lit, they would show the outline of the hull
-    // in front of them)
+    // How much the bolts light the puffs farther out than the near shell
     private const float FarGlow = 0.2f;
 
-    // Behind the puffs, at the shell's outer edge: dark layers facing the camera, and behind them the opaque Backdrop. The
-    // smoke texture is wispy, about 0.6 opaque where it is dense, so each layer's alpha makes up for that.
-    private const int BackdropLayers = 6;
-    private const float BackdropDistance = Radius + 4f;
-    private const float TextureOpacity = 0.6f;
+    // The fog: a layer every FogStep from FogFrom to FogTo, light from FogLength away is down to 1/e when the fog has
+    // formed; the backdrop at FogTo closes the view only once the fog in front of it is thick, so the hull of a big ship
+    // farther away never shows an edge there
+    private const float FogLength = 8f;
+    private const float FogFrom = 1f;
+    private const float FogTo = 40f;
+    private const float FogStep = 2f;
+    private const float BackdropFrom = 0.5f;
+    private const float BackdropOver = 0.4f;
 
-    // The backdrop comes in front of the ship by this much, but no nearer to the camera than NearestBackdrop
-    private const double ShipClearance = 2.0;
-    private const double NearestBackdrop = 1.2;
-
-    // Bolts closer than this fill the view (as in Cloud). They are drawn additive on top: the near shell would hide them
-    private const float BoltClearance = 8f;
+    // Bolts closer than this fill the view. They are drawn additive under the fog: it dims them with distance like
+    // everything in it, and the hull in front of one hides it
+    private const float BoltClearance = 4f;
     private const double BoltRate = 7.0;
 
     // Discharges in the near shell, seen as the smoke they light
@@ -56,6 +59,10 @@ public static class CameraCloud
 
     private static MyStringId? material;
     private static MyStringId Material => material ??= UnlitMaterials.Get("Smoke");
+
+    // Opaque white, fading in over a fog step in front of the scene
+    private static MyStringId? fogMaterial;
+    private static MyStringId FogMaterial => fogMaterial ??= UnlitMaterials.Get("Square", FogStep / 0.3f);
 
     private struct CameraPuff
     {
@@ -102,12 +109,11 @@ public static class CameraCloud
     /// <param name="camera">The camera's position</param>
     /// <param name="intensity">0..1, how far the ship's cloud has formed around the jump</param>
     /// <param name="lightning">0..1, the lightning in the ship's cloud</param>
-    /// <param name="shipDistance">How far the nearest grid of the jumping ship is from the camera</param>
-    public static void Draw(Vector3D camera, float intensity, float lightning, double now, double shipDistance)
+    public static void Draw(Vector3D camera, float intensity, float lightning, double now)
     {
         UpdateBolts(camera, intensity * lightning, now);
         UpdateFlashes(intensity * lightning, now);
-        DrawBackdrop(intensity, now, shipDistance);
+        DrawFog(intensity);
 
         var drift = Quaternion.CreateFromAxisAngle(Vector3.Up, (float)(now * 0.04));
         var flashTint = Palette.Flash;
@@ -118,36 +124,43 @@ public static class CameraCloud
             if (alpha < 0.003f)
                 continue;
 
-            var color = Cloud.SmokeColor + Glow(world, camera, puff.Near, now) * Cloud.FlashGlow * flashTint;
+            var color = Cloud.SmokeColor + Glow(world, camera, puff.Near, now) * (puff.Near ? FlashBoost : 1f) * Cloud.FlashGlow * flashTint;
             MyTransparentGeometry.AddPointBillboard(Material, new Vector4(color * alpha, alpha), world, puff.Radius, puff.Angle + puff.Spin * (float)now);
         }
 
         foreach (var bolt in Bolts)
-            bolt.Draw(Random, 1f, MyBillboard.BlendTypeEnum.AdditiveTop);
+            bolt.Draw(Random, 1f, MyBillboard.BlendTypeEnum.AdditiveBottom);
     }
 
-    private static void DrawBackdrop(float intensity, double now, double shipDistance)
+    /// <summary>0..1, how much is left of the light of something this far from the camera, in the fog of this intensity</summary>
+    public static float Transmission(double distance, float intensity) =>
+        (float)Math.Exp(-intensity * Math.Max(distance - FogFrom, 0.0) / FogLength) * (distance >= FogTo ? 1f - BackdropOpacity(intensity) : 1f);
+
+    /// <summary>0..1, how much the backdrop at <see cref="FogTo"/> hides</summary>
+    public static float BackdropOpacity(float intensity) => SmoothStep((intensity - BackdropFrom) / BackdropOver);
+
+    private static void DrawFog(float intensity)
     {
         var view = MySector.MainCamera;
         var matrix = view.WorldMatrix;
         var halfHeight = (float)Math.Tan(view.FieldOfView * 0.5);
         var halfWidth = halfHeight * Math.Max(1f, view.AspectRatio);
         var halfDiagonal = (float)Math.Sqrt(halfWidth * halfWidth + halfHeight * halfHeight);
-        var coverage = Math.Min(1f - (float)Math.Pow(1f - intensity, 2.2), 0.995f);
-        var alpha = Math.Min(1f, (1f - (float)Math.Pow(1f - coverage, 1.0 / BackdropLayers)) / TextureOpacity);
+        var alpha = 1f - (float)Math.Exp(-intensity * FogStep / FogLength);
         var color = new Vector4(Cloud.SmokeColor * alpha, alpha);
-        for (var i = 0; i < BackdropLayers; i++)
+        for (var distance = FogFrom; distance < FogTo; distance += FogStep)
         {
-            var distance = BackdropDistance + i;
-            var angle = (float)now * (i % 2 == 0 ? 0.05f : -0.04f) + i * 1.3f;
-            var rotation = Quaternion.CreateFromAxisAngle(matrix.Forward, angle);
-            MyTransparentGeometry.AddBillboardOriented(Material, color, matrix.Translation + matrix.Forward * distance,
-                Vector3.Transform(matrix.Left, rotation), Vector3.Transform(matrix.Up, rotation), distance * halfDiagonal * 2.6f);
+            MyTransparentGeometry.AddBillboardOriented(FogMaterial, color, matrix.Translation + matrix.Forward * distance, matrix.Left, matrix.Up,
+                distance * halfDiagonal * 1.2f);
         }
 
-        // The layers still let a little of a bright planet or asteroid through: behind them the view is closed. In front
-        // of the ship too: a hull or a lit window nearer than the layers would show through the puffs' gaps
-        Backdrop.Draw(MathHelper.Clamp(shipDistance - ShipClearance, NearestBackdrop, BackdropDistance + BackdropLayers), Backdrop.Opacity(intensity));
+        Backdrop.Draw(FogTo, BackdropOpacity(intensity));
+    }
+
+    private static float SmoothStep(float x)
+    {
+        x = MathHelper.Clamp(x, 0f, 1f);
+        return x * x * (3f - 2f * x);
     }
 
     private static void UpdateBolts(Vector3D camera, float intensity, double now)
