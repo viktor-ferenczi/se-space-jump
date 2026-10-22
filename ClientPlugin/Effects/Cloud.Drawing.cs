@@ -54,6 +54,8 @@ public sealed partial class Cloud
 
         var time = now - CreatedAt;
         var transmittance = 1.0;
+        sunlight = SmokeLight.Sunlight(center);
+        var portalRadius = Math.Max(PortalRadius, 1.0);
         var shroud = Shroud(now);
         PrepareBehindShip(cameraPosition, shroud);
         var hullLight = 1f - FrontLight(cameraPosition, shroud);
@@ -97,7 +99,7 @@ public sealed partial class Cloud
             // For a camera outside the portal the fog hugging the hull stays black in the discharges: lit, it would draw
             // the hull's outline where the hull cuts its billboards (the fog in front of the ship is lit instead)
             var glow = (puff.Hull ? hullLight : 1f) * Glow(world, now) * FlashGlow * (1f - BehindShip(world)) * NearCamera(world, cameraPosition);
-            var color = SmokeColor + (glow + abortFlash) * flashTint;
+            var color = SmokeLight.Color(sunlight, (world - center) / portalRadius, Vector3D.Normalize(toPuff)) + (glow + abortFlash) * flashTint;
             var angle = puff.Angle + puff.Spin * (float)time;
             alpha *= visibility;
             if (alpha < 0.003f)
@@ -155,7 +157,7 @@ public sealed partial class Cloud
         var radius = (float)(depth * Math.Tan(angle));
         var position = cameraPosition + direction * depth;
         var color = SmokeColor + Glow(position, now) * FlashGlow * flashTint;
-        var alpha = Math.Min(shroud, 1f);
+        var alpha = ShroudOpacity(shroud);
         for (var layer = 0; layer < FrontShroudLayers; layer++)
             MyTransparentGeometry.AddPointBillboard(Materials[layer % Materials.Length], new Vector4(color * alpha, alpha), position, radius * (1f - 0.1f * layer), (float)(now - CreatedAt) * 0.05f + 2.1f * layer);
 
@@ -218,6 +220,13 @@ public sealed partial class Cloud
         var height = (float)Math.Min(Extent(v) * scale, limit);
         MyTransparentGeometry.AddBillboardOriented(SoftDisc.Material, color, position, (Vector3)u, (Vector3)v, width, height);
     }
+
+    /// <summary>
+    /// The opacity of the layers in front of the ship for the share of them drawn: their optical depth follows the share, so
+    /// the ship fades in and out of them evenly to the eye (a bright hull behind an opacity going down evenly would show
+    /// all at once, at its first tenth)
+    /// </summary>
+    private static float ShroudOpacity(float shroud) => (1f - (float)Math.Exp(-ShroudDepth * MathHelper.Clamp(shroud, 0f, 1f))) / (1f - (float)Math.Exp(-ShroudDepth));
 
     /// <summary>
     /// 0..1, how much the discharges at the hull light the fog in front of the ship rather than the fog at the hull: for
@@ -289,7 +298,7 @@ public sealed partial class Cloud
 
     /// <summary>
     /// 0..1, how much of its ship the cloud hides now, for the lights and flames that no smoke hides (see
-    /// <see cref="Cover"/>): as the extra layers at the hull, torn away with the cloud at an abort; none once the ship
+    /// <see cref="Cover"/>): as the layers in front of the ship, torn away with the cloud at an abort; none once the ship
     /// left (it is in its destination cloud then)
     /// </summary>
     public float ShipCover(double now)
@@ -298,9 +307,9 @@ public sealed partial class Cloud
             return 0f;
 
         if (Kind == CloudKind.Origin && Aborted)
-            return SmoothStep((float)((abortedAt - (JumpAt - 3.0)) / 1.5)) * (1f - SmoothStep((float)(now - abortedAt) / 0.8f));
+            return ShroudOpacity(SmoothStep((float)((abortedAt - (JumpAt - 3.0)) / 1.5)) * (1f - SmoothStep((float)(now - abortedAt) / 0.8f)));
 
-        return Shroud(now);
+        return ShroudOpacity(Shroud(now));
     }
 
     /// <summary>0..1, how much of the extra layers at the hull are drawn: while the ship is inside the cloud</summary>

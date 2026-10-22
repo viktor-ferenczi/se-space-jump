@@ -525,6 +525,7 @@ public static class JumpEffects
         {
             var config = Config.Current;
             var camera = CameraPosition;
+            SmokeLight.Update();
             var sunDirection = (Vector3D)MySector.SunProperties.SunDirectionNormalized;
             var wrapped = 0f;
             Cloud wrappingCloud = null;
@@ -547,20 +548,27 @@ public static class JumpEffects
                 }
             }
 
+            if (wrappingCloud != null)
+                wrappingCloud.WrappedCamera = true;
+
             // A camera wrapped in its own cloud sees nothing outside it, the other clouds neither. Its ship is in the fog with
             // it, which forms with the ship's cloud from the countdown's start: the ship's own cloud is not drawn for this
-            // camera (its dense puffs at the hull would hide the ship, and let it come back as they faded)
+            // camera (its dense puffs at the hull would hide the ship, and let it come back as they faded), not even once
+            // the fog has cleared after the arrival (what is left of it would come in at once)
             foreach (var cloud in Clouds)
-                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, cloud == wrappingCloud ? 0f : 1f - wrapped, ref target);
+                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, ReplacedForCamera(cloud, wrappingCloud) ? 0f : 1f - wrapped, ref target);
 
             // A camera inside a cloud (a cockpit, a camera block, the hangar, anyone standing in it) sees nothing outside
-            // the smoke either. The third person camera wrapped in its own cloud has a backdrop of its own
+            // the smoke either. The third person camera in its void has the void's fog instead
             var forward = MySector.MainCamera.WorldMatrix.Forward;
             var inside = 0f;
             var insideDistance = 0.0;
             Cloud insideCloud = null;
             foreach (var cloud in Clouds)
             {
+                if (ReplacedForCamera(cloud, wrappingCloud))
+                    continue;
+
                 var density = cloud.InsideDensity(camera, forward, now, out var distance);
                 if (density > inside)
                 {
@@ -590,34 +598,31 @@ public static class JumpEffects
             }
 
             wrapped *= Math.Min(1f, config.Darkness);
+            if (wrapped > 0.005f)
+                CameraCloud.Draw(camera, wrappingCloud, wrapped, config.Lightning ? wrappingCloud.LightningIntensity(now) : 0f, now);
+            else
+                CameraCloud.Clear();
 
             // The flames and glares no smoke hides fade with the ship's cloud, and for a camera inside the smoke those
             // beyond its backdrop with the backdrop. For a wrapped camera they fade into its fog like everything in it,
             // its own ship's included
-            if (wrapped > 0f)
-                Cover.Update(Clouds, now, camera, wrappingCloud, wrapped, 0.0, 1f);
-            else
-                Cover.Update(Clouds, now, camera, null, 0f, backdropDistance, 1f - backdrop);
-
             if (wrapped > 0.005f)
-                CameraCloud.Draw(camera, wrapped, config.Lightning ? wrappingCloud.LightningIntensity(now) : 0f, now);
+                Cover.Update(Clouds, now, camera, wrappingCloud, CameraCloud.Current, 0.0, 1f);
             else
-                CameraCloud.Clear();
+                Cover.Update(Clouds, now, camera, null, default, backdropDistance, 1f - backdrop);
 
             // The estimate counts puffs as discs of their own opacity; in optical depth (-ln of the transmittance) the
-            // light fog of the first seconds is below 1, the formed cloud 15-20. The sky still shows through that, and so
-            // does the sun, a little dimmer; only a really thick fog (20-40) puts it out. Those in the jumping ship lose it
-            // to the transit itself: out from 5.5 s to 3.5 s before the jump (before the markers go), back from 2 s after
-            // it as the exit fog allows
+            // light fog of the first seconds is below 1, the formed cloud 15-20, where its middle hides the sky. The sun
+            // goes out behind it as the sky does, a few times later than the estimate says (it overlaps the puffs' soft
+            // discs): kept at 85 % up to a depth of 20, its glare shone over a cloud that hid everything else, which then
+            // looked thin in sunlight. Those in the jumping ship lose it to the transit itself: out from 5.5 s to 3.5 s
+            // before the jump (before the markers go), back from 2 s after it as the exit fog allows
             transmittance = target;
             var depth = -(float)Math.Log(Math.Max(target, 1e-30f));
-            var dim = MathHelper.Clamp(depth / 8f, 0f, 1f);
-            var gone = MathHelper.Clamp((depth - 20f) / 20f, 0f, 1f);
-            var x2 = (1f - 0.15f * dim * dim * (3f - 2f * dim)) * (1f - gone * gone * (3f - 2f * gone)) * (1f - TransitHidesSun(CameraJumpTime(now)));
+            var x2 = (float)Math.Exp(-depth / SunDepthScale) * (1f - TransitHidesSun(CameraJumpTime(now)));
 
-            // A camera wrapped in its own cloud is in the fog dimension: no sun there at all
-            var y = MathHelper.Clamp(wrapped / 0.5f, 0f, 1f);
-            target = x2 * (1f - y * y * (3f - 2f * y)) * (1f - backdrop);
+            // A camera wrapped in its own cloud is in the void: the sun is outside it, behind its fog
+            target = x2 * CameraCloud.OutsideTransmission(wrapped) * (1f - backdrop);
         }
         else
         {
@@ -639,6 +644,10 @@ public static class JumpEffects
         }
     }
 
+    // The ship's own cloud for the third person camera in the void: its fog stands in for it
+    private static bool ReplacedForCamera(Cloud cloud, Cloud wrappingCloud) =>
+        cloud == wrappingCloud || cloud.WrappedCamera && !cloud.Detached && ThirdPersonJumpsWith(cloud);
+
     private static float TransitHidesSun(double? t)
     {
         if (t is not double since)
@@ -650,6 +659,9 @@ public static class JumpEffects
 
     /// <summary>How much of the sun disc and its glare can be seen through the clouds from the camera, 1 when there is no cloud in the way</summary>
     public static float SunVisibility { get; private set; } = 1f;
+
+    // The sun behind a cloud keeps exp(-depth / SunDepthScale) of its light, for the estimated optical depth
+    private const float SunDepthScale = 3f;
 
     private static double lastDrawAt;
     private static double lastUpdateAt = double.NaN;

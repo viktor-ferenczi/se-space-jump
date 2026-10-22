@@ -38,7 +38,7 @@ public static class Cover
         public Vector3D Camera;
         public double BeyondSquared = double.MaxValue;
         public float BeyondKeep = 1f;
-        public float Fog;
+        public CameraCloud.Space Fog;
     }
 
     private static volatile Snapshot current = new Snapshot();
@@ -61,19 +61,19 @@ public static class Cover
 
         if (snapshot.BeyondKeep < 1f && Vector3D.DistanceSquared(position, snapshot.Camera) >= snapshot.BeyondSquared)
             keep *= snapshot.BeyondKeep;
-        if (snapshot.Fog > 0f)
-            keep *= CameraCloud.Transmission(Vector3D.Distance(position, snapshot.Camera), snapshot.Fog);
+        if (snapshot.Fog.Intensity > 0f)
+            keep *= snapshot.Fog.Transmission(position);
         return keep;
     }
 
-    public static bool Active => current.Places.Length != 0 || current.BeyondKeep < 1f || current.Fog > 0f;
+    public static bool Active => current.Places.Length != 0 || current.BeyondKeep < 1f || current.Fog.Intensity > 0f;
 
     /// <summary>Main thread, every frame the clouds are drawn</summary>
     /// <param name="inFog">The cloud whose ship is in the camera's fog with it, null for none: it does not cover its ship</param>
-    /// <param name="fog">For a third person camera in its fog: 0..1, how far that has formed (see CameraCloud)</param>
+    /// <param name="fog">For a third person camera in its fog: the void it is in (see CameraCloud), default for none</param>
     /// <param name="beyond">For a camera inside the smoke: how far its backdrop is</param>
     /// <param name="beyondKeep">0..1, how much is left beyond it of what the backdrop hides</param>
-    public static void Update(List<Cloud> clouds, double now, Vector3D camera, Cloud inFog, float fog, double beyond, float beyondKeep)
+    public static void Update(List<Cloud> clouds, double now, Vector3D camera, Cloud inFog, CameraCloud.Space fog, double beyond, float beyondKeep)
     {
         Building.Clear();
         foreach (var cloud in clouds)
