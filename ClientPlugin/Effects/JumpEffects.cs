@@ -556,6 +556,7 @@ public static class JumpEffects
             var forward = MySector.MainCamera.WorldMatrix.Forward;
             var inside = 0f;
             var insideDistance = 0.0;
+            Cloud insideCloud = null;
             foreach (var cloud in Clouds)
             {
                 var density = cloud.InsideDensity(camera, forward, now, out var distance);
@@ -563,12 +564,21 @@ public static class JumpEffects
                 {
                     inside = density;
                     insideDistance = distance;
+                    insideCloud = cloud;
                 }
             }
 
+            // In a sealed room (a cockpit, a bridge camera) the room and the ship around it stay in front of the backdrop.
+            // A camera in the smoke itself (a camera block on the hull, anyone standing in it) sees nothing but smoke: the
+            // hull and the lights next to it would show through the puffs' gaps, so the backdrop comes in front of the
+            // ship, as near as that takes (the nearer, the more of the smoke's light it outweighs)
+            var farBackdrop = Math.Max(Math.Max(insideDistance, CameraGridFarSide(camera, forward)), MinBackdropDistance);
+            var backdropDistance = insideCloud != null && insideCloud.IsOpenAt(camera)
+                ? MathHelper.Clamp(NearestGrid(insideCloud, camera) - ShipClearance, NearestBackdropDistance, farBackdrop)
+                : farBackdrop;
             var backdrop = Backdrop.Opacity(inside * (1f - wrapped) * Math.Min(1f, config.Darkness));
             if (backdrop > 0.003f)
-                Backdrop.Draw(Math.Max(Math.Max(insideDistance, CameraGridFarSide(camera, forward)), MinBackdropDistance), backdrop);
+                Backdrop.Draw(backdropDistance, backdrop);
 
             if (Log.DebugEnabled && (inside > 0f || wrapped > 0f) && now - lastBackdropLogAt >= 0.25)
             {
@@ -577,8 +587,14 @@ public static class JumpEffects
             }
 
             wrapped *= Math.Min(1f, config.Darkness);
+
+            // The flames and glares no smoke hides fade with the ship's cloud, and for a camera inside the smoke those
+            // beyond its backdrop with the backdrop (a wrapped camera's is all around it)
+            var closed = wrapped > 0f ? Backdrop.Opacity(wrapped) : backdrop;
+            Cover.Update(Clouds, now, camera, wrapped > 0f ? 0.0 : backdropDistance, 1f - closed);
+
             if (wrapped > 0.005f)
-                CameraCloud.Draw(camera, wrapped, config.Lightning ? wrappingCloud.LightningIntensity(now) : 0f, now);
+                CameraCloud.Draw(camera, wrapped, config.Lightning ? wrappingCloud.LightningIntensity(now) : 0f, now, NearestGrid(wrappingCloud, camera));
             else
                 CameraCloud.Clear();
 
@@ -600,6 +616,7 @@ public static class JumpEffects
         else
         {
             CameraCloud.Clear();
+            Cover.Clear();
         }
 
         // The sun disappears quickly into a cloud and comes back slowly, without flickering from one frame to the next
@@ -635,8 +652,12 @@ public static class JumpEffects
     private static double lastBackdropLogAt;
     private static bool cameraMarkersOut;
 
-    // The backdrop of a camera inside a cloud is never nearer than this
+    // The backdrop of a camera inside a cloud is never nearer than this, of a camera in the smoke itself this near
     private const double MinBackdropDistance = 8;
+    private const double NearestBackdropDistance = 1.2;
+
+    // A backdrop in front of the ship comes this much nearer than its nearest grid
+    private const double ShipClearance = 2.0;
 
     public static void Reset()
     {
@@ -657,6 +678,7 @@ public static class JumpEffects
         Origins.Clear();
         Arrivals.Clear();
         CameraCloud.Clear();
+        Cover.Clear();
         SunVisibility = 1f;
         session = null;
     }
@@ -700,6 +722,19 @@ public static class JumpEffects
         }
 
         return false;
+    }
+
+    /// <summary>How far the nearest grid of the cloud's jumping group is from the camera (its bounding box)</summary>
+    private static double NearestGrid(Cloud cloud, Vector3D camera)
+    {
+        var nearest = double.MaxValue;
+        foreach (var id in cloud.GroupIds)
+        {
+            if (MyEntities.TryGetEntityById(id, out MyCubeGrid grid) && !grid.MarkedForClose)
+                nearest = Math.Min(nearest, grid.PositionComp.WorldAABB.Distance(camera));
+        }
+
+        return nearest;
     }
 
     /// <summary>How far along the view direction the camera's grid reaches (its bounding sphere's far side), 0 without one</summary>

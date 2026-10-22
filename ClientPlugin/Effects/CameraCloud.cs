@@ -43,6 +43,10 @@ public static class CameraCloud
     private const float BackdropDistance = Radius + 4f;
     private const float TextureOpacity = 0.6f;
 
+    // The backdrop comes in front of the ship by this much, but no nearer to the camera than NearestBackdrop
+    private const double ShipClearance = 2.0;
+    private const double NearestBackdrop = 1.2;
+
     // Bolts closer than this fill the view (as in Cloud). They are drawn additive on top: the near shell would hide them
     private const float BoltClearance = 8f;
     private const double BoltRate = 7.0;
@@ -98,11 +102,12 @@ public static class CameraCloud
     /// <param name="camera">The camera's position</param>
     /// <param name="intensity">0..1, how far the ship's cloud has formed around the jump</param>
     /// <param name="lightning">0..1, the lightning in the ship's cloud</param>
-    public static void Draw(Vector3D camera, float intensity, float lightning, double now)
+    /// <param name="shipDistance">How far the nearest grid of the jumping ship is from the camera</param>
+    public static void Draw(Vector3D camera, float intensity, float lightning, double now, double shipDistance)
     {
         UpdateBolts(camera, intensity * lightning, now);
         UpdateFlashes(intensity * lightning, now);
-        DrawBackdrop(intensity, now);
+        DrawBackdrop(intensity, now, shipDistance);
 
         var drift = Quaternion.CreateFromAxisAngle(Vector3.Up, (float)(now * 0.04));
         var flashTint = Palette.Flash;
@@ -121,7 +126,7 @@ public static class CameraCloud
             bolt.Draw(Random, 1f, MyBillboard.BlendTypeEnum.AdditiveTop);
     }
 
-    private static void DrawBackdrop(float intensity, double now)
+    private static void DrawBackdrop(float intensity, double now, double shipDistance)
     {
         var view = MySector.MainCamera;
         var matrix = view.WorldMatrix;
@@ -140,8 +145,9 @@ public static class CameraCloud
                 Vector3.Transform(matrix.Left, rotation), Vector3.Transform(matrix.Up, rotation), distance * halfDiagonal * 2.6f);
         }
 
-        // The layers still let a little of a bright planet or asteroid through: behind them the view is closed
-        Backdrop.Draw(BackdropDistance + BackdropLayers, Backdrop.Opacity(intensity));
+        // The layers still let a little of a bright planet or asteroid through: behind them the view is closed. In front
+        // of the ship too: a hull or a lit window nearer than the layers would show through the puffs' gaps
+        Backdrop.Draw(MathHelper.Clamp(shipDistance - ShipClearance, NearestBackdrop, BackdropDistance + BackdropLayers), Backdrop.Opacity(intensity));
     }
 
     private static void UpdateBolts(Vector3D camera, float intensity, double now)

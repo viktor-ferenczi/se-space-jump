@@ -3,6 +3,7 @@ using ClientPlugin.Effects;
 using HarmonyLib;
 using Sandbox.Game.World;
 using VRageRender;
+using VRageMath;
 using VRageRender.Messages;
 
 namespace ClientPlugin.Patches;
@@ -62,6 +63,11 @@ public static class SunPatches
         data.Glare.Intensity *= glareBrightness;
     }
 
-    // The sun disc is so bright that a tenth of it still saturates the screen: it only looks dimmed when far less is left
-    private static float Brightness(float visibility) => visibility < 0.05f ? 0f : visibility * visibility * visibility;
+    // The sun disc is so bright that a tenth of it still saturates the screen: it only looks dimmed when far less is left.
+    // It goes out smoothly below a fifth: cut off at once, everything it lights went dark in one frame
+    private static float Brightness(float visibility)
+    {
+        var x = MathHelper.Clamp((visibility - 0.05f) / 0.15f, 0f, 1f);
+        return visibility * visibility * visibility * x * x * (3f - 2f * x);
+    }
 }

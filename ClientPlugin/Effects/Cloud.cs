@@ -55,6 +55,9 @@ public sealed partial class Cloud
     // ship, sized to the ship's silhouette
     private const int FrontShroudLayers = 3;
 
+    // Behind them an opaque core: opaque out to this many times the ship's outline, as far as the portal allows
+    private const double CoreMargin = 1.1;
+
     // Leaking fog: one wisp flows out this far (portal radii) over its cycle
     private const float LeakDistance = 0.35f;
 
