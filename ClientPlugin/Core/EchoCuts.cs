@@ -6,7 +6,7 @@ namespace ClientPlugin.Core;
 /// The hyperspace echoes, cut from the plugin's own roar (Assets/Sounds/roar.wav and roar.far.wav) on the player's
 /// machine, not shipped: the wails are short stretches of the roar with its low drone filtered out, so its howling tones
 /// stand out; the echoes are longer swells of the whole roar. Each fades in and out softly and repeats itself a few
-/// times, quieter each time; the peak at -3 dBFS.
+/// times, quieter each time; the peak at -3 dBFS. The roar is a seamless loop: a cut may run over its end into its start.
 /// </summary>
 public static class EchoCuts
 {
@@ -17,18 +17,18 @@ public static class EchoCuts
     /// <summary>File name, source file, start s, length s, high-pass Hz (0 for none), fade in s, fade out s, echo taps</summary>
     public static readonly (string Name, string Source, double Start, double Length, double HighPass, double FadeIn, double FadeOut, (double Delay, double Gain)[] Taps)[] Cuts =
     {
-        ("wail1", "roar", 0.3, 2.2, 120, 0.5, 1.0, WailTaps),
-        ("wail2", "roar", 1.5, 2.2, 120, 0.5, 1.0, WailTaps),
-        ("wail3", "roar", 4.4, 2.2, 120, 0.5, 1.0, WailTaps),
-        ("wail4", "roar", 5.3, 2.2, 120, 0.5, 1.0, WailTaps),
-        ("wail5", "roar", 6.8, 2.2, 120, 0.5, 1.0, WailTaps),
-        ("wail6", "roar", 7.7, 2.2, 120, 0.5, 1.0, WailTaps),
-        ("echo1", "roar", 0.0, 3.5, 0, 1.2, 1.8, RoarTaps),
-        ("echo2", "roar", 3.2, 3.5, 0, 1.2, 1.8, RoarTaps),
-        ("echo3", "roar", 6.4, 3.5, 0, 1.2, 1.8, RoarTaps),
-        ("echo4", "roar.far", 1.6, 3.5, 0, 1.2, 1.8, RoarTaps),
-        ("echo5", "roar.far", 4.8, 3.5, 0, 1.2, 1.8, RoarTaps),
-        ("echo6", "roar.far", 6.2, 3.5, 0, 1.2, 1.8, RoarTaps),
+        ("wail1", "roar", 6.3, 2.2, 120, 0.5, 1.0, WailTaps),
+        ("wail2", "roar", 7.5, 2.2, 120, 0.5, 1.0, WailTaps),
+        ("wail3", "roar", 0.4, 2.2, 120, 0.5, 1.0, WailTaps),
+        ("wail4", "roar", 1.3, 2.2, 120, 0.5, 1.0, WailTaps),
+        ("wail5", "roar", 2.8, 2.2, 120, 0.5, 1.0, WailTaps),
+        ("wail6", "roar", 3.7, 2.2, 120, 0.5, 1.0, WailTaps),
+        ("echo1", "roar", 6.0, 3.5, 0, 1.2, 1.8, RoarTaps),
+        ("echo2", "roar", 9.2, 3.5, 0, 1.2, 1.8, RoarTaps),
+        ("echo3", "roar", 2.4, 3.5, 0, 1.2, 1.8, RoarTaps),
+        ("echo4", "roar.far", 7.6, 3.5, 0, 1.2, 1.8, RoarTaps),
+        ("echo5", "roar.far", 0.8, 3.5, 0, 1.2, 1.8, RoarTaps),
+        ("echo6", "roar.far", 2.2, 3.5, 0, 1.2, 1.8, RoarTaps),
     };
 
     private const int SampleRate = LightningCuts.SampleRate;
@@ -37,13 +37,13 @@ public static class EchoCuts
     public static short[] Cut(short[] source, double start, double length, double highPass, double fadeIn, double fadeOut, (double Delay, double Gain)[] taps)
     {
         var from = (int)(start * SampleRate);
-        var n = Math.Min((int)(length * SampleRate), source.Length - from);
-        if (n <= 0)
+        var n = Math.Min((int)(length * SampleRate), source.Length);
+        if (from < 0 || from >= source.Length)
             throw new ArgumentException($"cut at {start} s is beyond the end of the source");
 
         var y = new double[n];
         for (var i = 0; i < n; i++)
-            y[i] = source[from + i] / 32768.0;
+            y[i] = source[(from + i) % source.Length] / 32768.0;
 
         // Two passes of a second order high-pass: 24 dB per octave below the cutoff
         if (highPass > 0)

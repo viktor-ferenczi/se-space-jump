@@ -56,10 +56,11 @@ public sealed class GateSound
     private int nextShot;
 
     // The echoes: a wail every WailSpacing s (each one about 3.3 s long, so 4 or 5 overlap: a constant stream), a roar
-    // echo every EchoSpacing s; both rise over EchoRise s from the start of the pre-jump, then follow the roar's level
+    // echo every EchoSpacing s; both rise over EchoRise s from the start of the pre-jump (the wails fade in on their
+    // own as well), then follow the roar's level
     private const double WailSpacingMin = 0.5, WailSpacingMax = 1.0;
     private const double EchoSpacingMin = 1.5, EchoSpacingMax = 4.0;
-    private const double EchoRise = 1.8;
+    private const double EchoRise = 0.6;
 
     // Where in the cloud they sound, as a share of its radius from its center: the wails close around the listener,
     // the echoes anywhere in it
@@ -67,8 +68,13 @@ public sealed class GateSound
 
     private static readonly Random Random = new Random();
 
+    // When the echoes start, this many wails start at once: the stream sounds full from the start, not after the 3 s
+    // its overlap takes to build up
+    private const int WailsAtOnce = 3;
+
     private double echoesFrom = double.NaN;
     private double nextWailAt, nextEchoAt;
+    private int wailsDue;
 
     public GateSound()
     {
@@ -88,7 +94,10 @@ public sealed class GateSound
     {
         Phase = phase;
         if (Echoing(phase))
+        {
             echoesFrom = double.NegativeInfinity;
+            wailsDue = WailsAtOnce;
+        }
     }
 
     // The echoes' level: rising from the start of the pre-jump; a gate that was echoing already elsewhere (the exit, a
@@ -106,7 +115,10 @@ public sealed class GateSound
     public void Update(double now, GatePhase phase, Vector3D position, float level, float nearness, float gain, double radius, float inside)
     {
         if (Echoing(phase) && double.IsNaN(echoesFrom))
+        {
             echoesFrom = phase == GatePhase.PreJump && Phase != GatePhase.None ? now : double.NegativeInfinity;
+            wailsDue = WailsAtOnce;
+        }
 
         if (phase != Phase)
         {
@@ -150,17 +162,20 @@ public sealed class GateSound
         var echoLevel = level * EchoLevel(now);
         if (!double.IsNaN(echoesFrom) && phase != GatePhase.Abort)
         {
-            if (now >= nextWailAt)
+            while (now >= nextWailAt || wailsDue > 0)
             {
+                wailsDue = Math.Max(0, wailsDue - 1);
                 nextWailAt = now + Uniform(WailSpacingMin, WailSpacingMax);
-                if (inside > 0f && Start(JumpSound.Wail, position, Scatter(radius * WailSpread), EchoVolume(JumpSound.Wail, gain, echoLevel, inside)))
+                if (EchoVolume(JumpSound.Wail, gain, level, inside) >= Inaudible &&
+                    Start(JumpSound.Wail, position, Scatter(radius * WailSpread), EchoVolume(JumpSound.Wail, gain, echoLevel, inside), true))
                     JumpSounds.WailsPlayed++;
             }
 
             if (now >= nextEchoAt)
             {
                 nextEchoAt = now + Uniform(EchoSpacingMin, EchoSpacingMax);
-                if (Start(JumpSound.Echo, position, Scatter(radius * EchoSpread), EchoVolume(JumpSound.Echo, gain, echoLevel, inside)))
+                if (EchoVolume(JumpSound.Echo, gain, level, inside) >= Inaudible &&
+                    Start(JumpSound.Echo, position, Scatter(radius * EchoSpread), EchoVolume(JumpSound.Echo, gain, echoLevel, inside), true))
                     JumpSounds.EchoesPlayed++;
             }
         }
@@ -211,11 +226,12 @@ public sealed class GateSound
             pending.Add((slot, startAt));
     }
 
-    // At its volume, on a free emitter, else on the one started longest ago
-    private bool Start(JumpSound slot, Vector3D position, Vector3D offset, float volume)
+    // At its volume, on a free emitter, else on the one started longest ago. An echo starts however quiet it is while
+    // the echoes rise: the caller checks that it will be heard once they have risen.
+    private bool Start(JumpSound slot, Vector3D position, Vector3D offset, float volume, bool rising = false)
     {
         var pair = JumpSounds.PairOf(slot);
-        if (pair == null || volume < Inaudible)
+        if (pair == null || volume < Inaudible && !rising)
             return false;
 
         var index = nextShot;

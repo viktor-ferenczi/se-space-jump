@@ -194,7 +194,7 @@ public static class JumpSounds
     public static string EchoFolder => Path.Combine(MyFileSystem.UserDataPath, "Storage", Plugin.Name, "Echoes");
 
     // Bump to make the files again after a change of the cuts or of the roar
-    private const string EchoVersion = "1435-v01";
+    private const string EchoVersion = "1435-v02";
 
     private static List<string> EchoFiles(string name)
     {
