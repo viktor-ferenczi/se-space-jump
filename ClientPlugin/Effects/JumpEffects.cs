@@ -139,12 +139,12 @@ public static class JumpEffects
     }
 
     // The HUD message of the camera's own jump (it replaces the vanilla countdown): the gate manifests until the HUD
-    // markers flicker out (Cloud.MarkersOutAt, rounded down to the second: their flicker starts there), the ship is in
-    // transit from then until TransitUntil after the jump (the smoke hides it then, and the world outside), and the jump
-    // is complete for CompleteFor more. Both phases count down the seconds to the end of the transit, as the vanilla
-    // countdown does to the jump
-    private static readonly double TransitFrom = Math.Floor(Cloud.MarkersOutAt);
-    private const double TransitUntil = 5;
+    // markers start to flicker out (t-4), the ship is in transit from then until they start to flicker back in at the
+    // exit (t+5; the smoke hides it in between, and the world outside), and the jump is complete for CompleteFor more.
+    // Both phases count down the seconds to the end of the transit, as the vanilla countdown does to the jump: 15 at
+    // the start of a 10 s countdown
+    private const double TransitFrom = Cloud.MarkersOutAt - Cloud.MarkerFlickerHalf;
+    private const double TransitUntil = Cloud.MarkersInAt - Cloud.MarkerFlickerHalf;
     private const double CompleteFor = 3;
 
     private static string JumpMessage(double? t)
@@ -156,6 +156,34 @@ public static class JumpEffects
 
         var left = (int)Math.Ceiling(TransitUntil - since);
         return $"{(since >= TransitFrom ? "In Transit" : "Manifesting Gate")} ({left} s)";
+    }
+
+    /// <summary>
+    /// Whether the local player is on or in a ship counting down to its jump but will not jump with it. The game counts
+    /// as the ship's crew the characters in its grid group's box, and teleports only those seated in it: the children of
+    /// its blocks (MyGridJumpDriveSystem.GetJumpDriveText, MyCubeGrid.Teleport). Anyone else there stays behind
+    /// </summary>
+    private static bool LeftBehind()
+    {
+        var character = MySession.Static?.LocalCharacter;
+        if (character == null || character.IsDead || character.MarkedForClose)
+            return false;
+
+        var position = character.PositionComp.GetPosition();
+        var seatedIn = (character.Parent as MyEntity)?.GetTopMostParent()?.EntityId;
+        foreach (var cloud in Origins.Values)
+        {
+            if (cloud.Aborted || cloud.Detached || cloud.Finished || cloud.Grid == null || cloud.Grid.MarkedForClose)
+                continue;
+
+            if (seatedIn is long id && cloud.GroupIds.Contains(id))
+                continue;
+
+            if (cloud.Grid.GetPhysicalGroupAABB().Contains(position) != ContainmentType.Disjoint)
+                return true;
+        }
+
+        return false;
     }
 
     /// <summary>Seconds since the jump of the camera's grid (negative in the countdown), null when it is not jumping</summary>
@@ -291,6 +319,7 @@ public static class JumpEffects
         JumpSounds.Update();
         var jumpTime = CameraJumpTime(now);
         NotificationPatches.ShowJumpMessage(JumpMessage(jumpTime), jumpTime);
+        NotificationPatches.ShowJumpImminent(LeftBehind());
         var markersOut = CameraMarkersHidden(now) >= 0.5f;
         if (markersOut != cameraMarkersOut)
         {

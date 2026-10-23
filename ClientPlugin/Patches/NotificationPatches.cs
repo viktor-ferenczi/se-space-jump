@@ -10,7 +10,7 @@ namespace ClientPlugin.Patches;
 /// <summary>
 /// The jump's HUD message names what the gate is doing instead of the vanilla "Ship will jump in N seconds":
 /// Manifesting Gate (N s), In Transit (N s), Jump Complete (see JumpEffects.JumpMessage). An aborted jump shows "JUMP ABORTED!"
-/// instead of the reason.
+/// instead of the reason, and a player the jump would leave behind sees "JUMP IMMINENT!" in the same red.
 /// </summary>
 [HarmonyPatch(typeof(MyHudNotifications), nameof(MyHudNotifications.Add), typeof(MyHudNotificationBase))]
 [SuppressMessage("ReSharper", "UnusedType.Global")]
@@ -74,6 +74,28 @@ public static class NotificationPatches
         jumpMessage.SetTextFormatArguments(text);
         MyHud.Notifications.Add(jumpMessage);
         Log.Debug($"Jump message: {text} (t{jumpTime:+0.00;-0.00})");
+    }
+
+    private static MyHudNotification imminent;
+
+    /// <summary>Shows "JUMP IMMINENT!" in the red of the abort while the local player is about to be left behind, see JumpEffects.LeftBehind</summary>
+    public static void ShowJumpImminent(bool show)
+    {
+        if (show == (imminent != null))
+            return;
+
+        if (imminent != null)
+        {
+            MyHud.Notifications.Remove(imminent);
+            imminent = null;
+            Log.Debug("Jump message: JUMP IMMINENT! removed");
+            return;
+        }
+
+        imminent = new MyHudNotification(MySpaceTexts.Format_OneParameter, 60000, "Red", level: MyNotificationLevel.Important);
+        imminent.SetTextFormatArguments("JUMP IMMINENT!");
+        MyHud.Notifications.Add(imminent);
+        Log.Debug("Jump message: JUMP IMMINENT!");
     }
 
     public static void ShowJumpAborted()
