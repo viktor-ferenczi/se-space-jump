@@ -11,14 +11,17 @@ counts down to the jump in place of the usual one, and the location markers flic
 
 The smoke stays out of pressurized rooms, so from inside the ship you only see it through the windows.
 
+In third person view the camera gets its own cloud while your ship jumps. Wherever the camera is, you see only
+smoke and lightning until the ship comes out at the other end.
+
 In multiplayer the plugin works on your own client only. You see and hear every jump near you, whether or not the
 other players have the plugin.
 
 ## Settings
 
 Open the plugin's settings from the Pulsar plugin list. You can change the colours of the lightning and flashes, the
-size and density of the clouds, how far away clouds are drawn, and how quiet the music gets during a jump. If the
-effect is slow on your GPU, lower the smoke billboard count.
+size and density of the clouds, how far away clouds are drawn, how quiet the music gets during a jump, and whether
+your third person camera is wrapped in smoke. If the effect is slow on your GPU, lower the smoke billboard count.
 
 ## Sounds
 
