@@ -58,6 +58,12 @@ public sealed partial class Cloud
     // Behind them an opaque core: opaque out to this many times the ship's outline, as far as the portal allows
     private const double CoreMargin = 1.1;
 
+    // The optical depth of the layers in front of the ship when they are fully drawn (see ShroudOpacity)
+    private const float ShroudDepth = 9f;
+
+    // The sun's light at the cloud this frame (see SmokeLight)
+    private float sunlight;
+
     // Leaking fog: one wisp flows out this far (portal radii) over its cycle
     private const float LeakDistance = 0.35f;
 
@@ -162,6 +168,10 @@ public sealed partial class Cloud
     private double fadeVisualDelay;
 
     public bool Finished { get; private set; }
+
+    /// <summary>The third person camera has been in the fog of this cloud: its own fog stands in for the cloud (see JumpEffects.Draw)</summary>
+    public bool WrappedCamera;
+
     public bool Started => !double.IsNaN(StartedAt);
 
     /// <summary>Since when the cloud forms where it is drawn: a destination cloud made late, since it took over</summary>
@@ -171,6 +181,12 @@ public sealed partial class Cloud
     public Vector3D Departure => detachedTranslation;
     public Vector3D Arrival => arrival;
     public Vector3D Center => Vector3D.Transform(Shape?.BubbleCenter ?? Vector3D.Zero, frame);
+
+    /// <summary>The portal's radius, 0 until the shape is ready</summary>
+    public double PortalRadius => Shape?.BubbleSemiAxes.Max() ?? 0;
+
+    /// <summary>Half the diagonal of the ship's box, 0 until the shape is ready (or without a ship)</summary>
+    public double ShipRadius => Shape != null && Shape.LocalBox.Valid ? Shape.LocalBox.HalfExtents.Length() : 0;
 
     private readonly List<Bolt> bolts = new List<Bolt>();
     private readonly List<Spark> sparks = new List<Spark>();

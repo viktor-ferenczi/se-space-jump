@@ -14,10 +14,15 @@ cloud nothing of the outside shows through it: no planets, asteroids, stars or o
 gathers and breaks up. Seen from outside, the cloud hides the ship completely before it jumps and as it arrives: its
 hull, its lights and the flames of its thrusters go dark in the smoke, so nothing changes when the ship is gone.
 
-In third person view the camera goes into the fog with your ship while it jumps, from the start of the countdown.
-Nothing outside the cloud shows, only smoke and lightning, until the ship comes out at the other end. Your ship is
-in the fog with you: up close you still see it, its lights and the flames of its thrusters, and the farther the camera
-is from it, the deeper it fades into the smoke.
+In third person view the camera goes into the void with your ship while it jumps, from the start of the countdown.
+The world outside the gate fades away into thick fog until nothing of it shows, only smoke and lightning, and comes back
+the same way once the ship is out at the other end. Your ship is in the void with you: you still see it, its lights and
+the flames of its thrusters, a little fogged, the more the farther a part of it is from the camera. Zooming out never
+makes it disappear.
+
+The smoke is lit by the sun: in sunlight the outer edge of the cloud turns a dark grey, brighter on its sunny side and
+brightest when you look at it towards the sun, while its inside stays black. The cloud stands out as well against black
+space as against a bright nebula.
 
 In multiplayer the plugin works on your own client only. You see and hear every jump near you, whether or not the
 other players have the plugin.

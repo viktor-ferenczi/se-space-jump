@@ -9,15 +9,19 @@ using VRageRender;
 namespace ClientPlugin.Effects;
 
 /// <summary>
-/// The cloud around a third person camera that jumps with the ship. The camera can be anywhere around the ship, often
-/// outside its cloud or where that cloud is thin (a big ship's cloud is wide), so it gets a cloud of its own: the same
-/// black smoke around the camera, with lightning, and the other clouds are not drawn for it. The camera goes into the fog
-/// with the ship, so what is near it, the ship itself above all, shows through the smoke and fades into it with distance:
-/// uniform dark layers facing the camera, one every FogStep, each fading in softly in front of what it covers (no edge
-/// where it cuts through the hull), take the light of anything at a distance d down to exp(-d / FogLength). Behind the
-/// last of them the opaque Backdrop closes the view: nothing outside the cloud shows. Wisps of smoke drift in the fog,
-/// lit by the discharges near the camera. They move with the camera and keep their orientation in the world, so they turn
-/// past the view when the camera turns.
+/// The cloud around a third person camera that jumps with the ship: the camera goes into the void with its ship. The
+/// void is a sphere around the ship's portal that grows to take the camera in. Inside it a thin fog: what is in the void
+/// with the camera, the ship above all, stays visible, a little fogged, fading with its distance. Beyond its surface the
+/// fog is thick: everything outside the gate (planets, asteroids, the sun, other ships) is left behind.
+///
+/// The fog is a volume drawn as layers, every part of it a share of one optical depth, so it fades smoothly with the
+/// distance and over time and has no edge anywhere: in front of the camera, layers facing it at depths that grow
+/// geometrically, each standing for the fog between it and the next one (soft particles: a hull between two layers gets
+/// the share of the fog in front of it); at the void's surface, nested spheres. Seen through the layers, something d
+/// metres away keeps exp(-d / FogLength) of its light, and something outside the void nothing, once the fog has formed.
+///
+/// Wisps of smoke drift in the fog, lit by the discharges near the camera. They move with the camera and keep their
+/// orientation in the world, so they turn past the view when the camera turns.
 /// </summary>
 public static class CameraCloud
 {
@@ -33,21 +37,34 @@ public static class CameraCloud
 
     // The wisps are thin: the fog takes the light with distance, the wisps only show the smoke moving. The flashes light
     // the near ones brighter for it
-    private const float Density = 0.45f;
+    private const float Density = 0.3f;
     private const float FlashBoost = 2f;
 
     // How much the bolts light the puffs farther out than the near shell
     private const float FarGlow = 0.2f;
 
-    // The fog: a layer every FogStep from FogFrom to FogTo, light from FogLength away is down to 1/e when the fog has
-    // formed; the backdrop at FogTo closes the view only once the fog in front of it is thick, so the hull of a big ship
-    // farther away never shows an edge there
-    private const float FogLength = 8f;
-    private const float FogFrom = 1f;
-    private const float FogTo = 40f;
-    private const float FogStep = 2f;
-    private const float BackdropFrom = 0.5f;
-    private const float BackdropOver = 0.4f;
+    // The fog inside the void: light from FogLength away is down to 1/e once it has formed. Never shorter than
+    // MinFogLength, and as long as the ship is far from the camera, so the ship stays in view at any zoom, only fogged
+    private const float MinFogLength = 15f;
+    private const float FogLengthPerDistance = 1f;
+
+    // Layers facing the camera, from FirstLayer metres on, each LayerGrowth times farther than the one before
+    private const float FirstLayer = 0.6f;
+    private const float LayerGrowth = 1.3f;
+    private const int MaxLayers = 40;
+
+    // The void's surface: at least VoidMargin beyond the camera and the portal. The thick fog beyond it is Shells nested
+    // spheres, ShellSpacing of the void's radius apart, OutsideDepth optical depth in all once formed (1e-7 of the light
+    // is left), of which the formation's share is its square: what is outside is gone well before the fog in the void
+    // has formed
+    private const double VoidMargin = 12;
+    private const int Shells = 6;
+    private const double ShellSpacing = 0.05;
+    private const double MinShellSpacing = 2;
+    private const float OutsideDepth = 16f;
+
+    // The shells' spheres are cube spheres of this many quads along a cube face's edge
+    private const int ShellDivisions = 8;
 
     // Bolts closer than this fill the view. They are drawn additive under the fog: it dims them with distance like
     // everything in it, and the hull in front of one hides it
@@ -60,15 +77,45 @@ public static class CameraCloud
     private static MyStringId? material;
     private static MyStringId Material => material ??= UnlitMaterials.Get("Smoke");
 
-    // Opaque white, fading in over a fog step in front of the scene
-    private static MyStringId? fogMaterial;
-    private static MyStringId FogMaterial => fogMaterial ??= UnlitMaterials.Get("Square", FogStep / 0.3f);
-
     private struct CameraPuff
     {
         public Vector3 Local;
         public float Radius, Alpha, Angle, Spin;
         public bool Near;
+    }
+
+    /// <summary>The void around the camera this frame</summary>
+    public readonly struct Space
+    {
+        public readonly Vector3D Camera;
+        public readonly Vector3D Center;
+        public readonly double Radius;
+        public readonly double Spacing;
+        public readonly float Length;
+        public readonly float Intensity;
+
+        public Space(Vector3D camera, Vector3D center, double radius, double spacing, float length, float intensity)
+        {
+            Camera = camera;
+            Center = center;
+            Radius = radius;
+            Spacing = spacing;
+            Length = length;
+            Intensity = intensity;
+        }
+
+        /// <summary>0..1, how much is left of the light of something at this place, seen from the camera</summary>
+        public float Transmission(Vector3D position)
+        {
+            if (Intensity <= 0f)
+                return 1f;
+
+            var depth = Intensity * Math.Max(Vector3D.Distance(position, Camera) - FirstLayer, 0.0) / Length;
+            var outside = (Vector3D.Distance(position, Center) - Radius) / (Shells * Spacing);
+            if (outside > 0)
+                depth += OutsideOpticalDepth(Intensity) * Math.Min(outside, 1.0);
+            return (float)Math.Exp(-depth);
+        }
     }
 
     private static readonly CameraPuff[] Puffs = new CameraPuff[PuffCount];
@@ -77,6 +124,16 @@ public static class CameraCloud
     private static readonly Random Random = new Random();
     private static double nextBoltAt;
     private static double nextFlashAt;
+
+    // The layers' depths and their soft particle materials, each fading in over the depth up to the next layer
+    private static readonly float[] LayerDepths = new float[MaxLayers + 1];
+    private static readonly MyStringId?[] LayerMaterials = new MyStringId?[MaxLayers];
+
+    // Unit directions of the shell sphere's vertices, per cube face
+    private static readonly Vector3D[,,] ShellVertices = new Vector3D[6, ShellDivisions + 1, ShellDivisions + 1];
+
+    // The shells' soft particle materials: for spacings in steps of a quarter of an octave
+    private static readonly Dictionary<int, MyStringId> ShellMaterials = new Dictionary<int, MyStringId>();
 
     static CameraCloud()
     {
@@ -98,22 +155,65 @@ public static class CameraCloud
                 Near = near,
             };
         }
+
+        LayerDepths[0] = FirstLayer;
+        for (var k = 1; k <= MaxLayers; k++)
+            LayerDepths[k] = LayerDepths[k - 1] * LayerGrowth;
+
+        // Cube faces: a normal and two axes across it
+        var faces = new[]
+        {
+            (Vector3D.Right, Vector3D.Up, Vector3D.Forward), (Vector3D.Left, Vector3D.Up, Vector3D.Backward),
+            (Vector3D.Up, Vector3D.Forward, Vector3D.Right), (Vector3D.Down, Vector3D.Backward, Vector3D.Right),
+            (Vector3D.Forward, Vector3D.Up, Vector3D.Left), (Vector3D.Backward, Vector3D.Up, Vector3D.Right),
+        };
+        for (var face = 0; face < 6; face++)
+        {
+            var (normal, a, b) = faces[face];
+            for (var i = 0; i <= ShellDivisions; i++)
+            for (var j = 0; j <= ShellDivisions; j++)
+            {
+                var u = Math.Tan((2.0 * i / ShellDivisions - 1) * Math.PI / 4);
+                var v = Math.Tan((2.0 * j / ShellDivisions - 1) * Math.PI / 4);
+                ShellVertices[face, i, j] = Vector3D.Normalize(normal + a * u + b * v);
+            }
+        }
     }
+
+    /// <summary>The void of the last frame drawn, for the flames and glares in it (see <see cref="Cover"/>)</summary>
+    public static Space Current { get; private set; }
 
     public static void Clear()
     {
         Bolts.Clear();
         Flashes.Clear();
+        Current = default;
     }
 
+    /// <summary>Optical depth of the fog outside the void at a formation of 0..1</summary>
+    public static float OutsideOpticalDepth(float intensity) => OutsideDepth * intensity * intensity;
+
+    /// <summary>0..1, how much of what is outside the void shows through its fog</summary>
+    public static float OutsideTransmission(float intensity) => (float)Math.Exp(-OutsideOpticalDepth(intensity));
+
     /// <param name="camera">The camera's position</param>
-    /// <param name="intensity">0..1, how far the ship's cloud has formed around the jump</param>
+    /// <param name="cloud">The cloud of the camera's ship: its portal is in the void</param>
+    /// <param name="intensity">0..1, how far the camera's fog has formed</param>
     /// <param name="lightning">0..1, the lightning in the ship's cloud</param>
-    public static void Draw(Vector3D camera, float intensity, float lightning, double now)
+    public static void Draw(Vector3D camera, Cloud cloud, float intensity, float lightning, double now)
     {
+        var center = cloud.Center;
+        var toCenter = Vector3D.Distance(camera, center);
+        var radius = Math.Max(cloud.PortalRadius, toCenter + VoidMargin);
+        var length = Math.Max(MinFogLength, FogLengthPerDistance * (float)(toCenter + 0.5 * cloud.ShipRadius));
+        var spacing = Math.Max(MinShellSpacing, ShellSpacing * radius);
+        Current = new Space(camera, center, radius, spacing, length, intensity);
+
+        var fog = Cloud.SmokeColor;
         UpdateBolts(camera, intensity * lightning, now);
         UpdateFlashes(intensity * lightning, now);
-        DrawFog(intensity);
+        DrawLayers(Current, fog);
+        DrawShells(Current, fog);
 
         var drift = Quaternion.CreateFromAxisAngle(Vector3.Up, (float)(now * 0.04));
         var flashTint = Palette.Flash;
@@ -124,7 +224,7 @@ public static class CameraCloud
             if (alpha < 0.003f)
                 continue;
 
-            var color = Cloud.SmokeColor + Glow(world, camera, puff.Near, now) * (puff.Near ? FlashBoost : 1f) * Cloud.FlashGlow * flashTint;
+            var color = fog + Glow(world, camera, puff.Near, now) * (puff.Near ? FlashBoost : 1f) * Cloud.FlashGlow * flashTint;
             MyTransparentGeometry.AddPointBillboard(Material, new Vector4(color * alpha, alpha), world, puff.Radius, puff.Angle + puff.Spin * (float)now);
         }
 
@@ -132,35 +232,70 @@ public static class CameraCloud
             bolt.Draw(Random, 1f, MyBillboard.BlendTypeEnum.AdditiveBottom);
     }
 
-    /// <summary>0..1, how much is left of the light of something this far from the camera, in the fog of this intensity</summary>
-    public static float Transmission(double distance, float intensity) =>
-        (float)Math.Exp(-intensity * Math.Max(distance - FogFrom, 0.0) / FogLength) * (distance >= FogTo ? 1f - BackdropOpacity(intensity) : 1f);
-
-    /// <summary>0..1, how much the backdrop at <see cref="FogTo"/> hides</summary>
-    public static float BackdropOpacity(float intensity) => SmoothStep((intensity - BackdropFrom) / BackdropOver);
-
-    private static void DrawFog(float intensity)
+    /// <summary>The fog in the void: layers facing the camera, out to the void's far side</summary>
+    private static void DrawLayers(Space fog, Vector3 color)
     {
         var view = MySector.MainCamera;
         var matrix = view.WorldMatrix;
         var halfHeight = (float)Math.Tan(view.FieldOfView * 0.5);
         var halfWidth = halfHeight * Math.Max(1f, view.AspectRatio);
         var halfDiagonal = (float)Math.Sqrt(halfWidth * halfWidth + halfHeight * halfHeight);
-        var alpha = 1f - (float)Math.Exp(-intensity * FogStep / FogLength);
-        var color = new Vector4(Cloud.SmokeColor * alpha, alpha);
-        for (var distance = FogFrom; distance < FogTo; distance += FogStep)
+        var farthest = Vector3D.Distance(fog.Camera, fog.Center) + fog.Radius;
+        for (var k = 0; k < MaxLayers && LayerDepths[k] < farthest; k++)
         {
-            MyTransparentGeometry.AddBillboardOriented(FogMaterial, color, matrix.Translation + matrix.Forward * distance, matrix.Left, matrix.Up,
-                distance * halfDiagonal * 1.2f);
-        }
+            var depth = LayerDepths[k];
+            var alpha = 1f - (float)Math.Exp(-fog.Intensity * (LayerDepths[k + 1] - depth) / fog.Length);
+            if (alpha < 0.001f)
+                continue;
 
-        Backdrop.Draw(FogTo, BackdropOpacity(intensity));
+            var layerMaterial = LayerMaterials[k] ??= UnlitMaterials.Get("Square", (LayerDepths[k + 1] - depth) / 0.3f);
+            MyTransparentGeometry.AddBillboardOriented(layerMaterial, new Vector4(color * alpha, alpha), matrix.Translation + matrix.Forward * depth, matrix.Left, matrix.Up,
+                depth * halfDiagonal * 1.2f);
+        }
     }
 
-    private static float SmoothStep(float x)
+    /// <summary>The thick fog beyond the void's surface: nested spheres around it, the parts in front of the camera</summary>
+    private static void DrawShells(Space fog, Vector3 color)
     {
-        x = MathHelper.Clamp(x, 0f, 1f);
-        return x * x * (3f - 2f * x);
+        var alpha = 1f - (float)Math.Exp(-OutsideOpticalDepth(fog.Intensity) / Shells);
+        if (alpha < 0.001f)
+            return;
+
+        var shellMaterial = ShellMaterial(fog.Spacing);
+        var forward = MySector.MainCamera.WorldMatrix.Forward;
+        var vector = new Vector4(color * alpha, alpha);
+        for (var shell = 0; shell < Shells; shell++)
+        {
+            var radius = fog.Radius + shell * fog.Spacing;
+            for (var face = 0; face < 6; face++)
+            for (var i = 0; i < ShellDivisions; i++)
+            for (var j = 0; j < ShellDivisions; j++)
+            {
+                var quad = new MyQuadD
+                {
+                    Point0 = fog.Center + ShellVertices[face, i, j] * radius,
+                    Point1 = fog.Center + ShellVertices[face, i + 1, j] * radius,
+                    Point2 = fog.Center + ShellVertices[face, i + 1, j + 1] * radius,
+                    Point3 = fog.Center + ShellVertices[face, i, j + 1] * radius,
+                };
+
+                // Behind the camera
+                if (Vector3D.Dot(quad.Point0 - fog.Camera, forward) < 0 && Vector3D.Dot(quad.Point1 - fog.Camera, forward) < 0 &&
+                    Vector3D.Dot(quad.Point2 - fog.Camera, forward) < 0 && Vector3D.Dot(quad.Point3 - fog.Camera, forward) < 0)
+                    continue;
+
+                var middle = (quad.Point0 + quad.Point2) * 0.5;
+                MyTransparentGeometry.AddQuad(shellMaterial, ref quad, vector, ref middle);
+            }
+        }
+    }
+
+    private static MyStringId ShellMaterial(double spacing)
+    {
+        var step = (int)Math.Round(Math.Log(spacing, 2) * 4);
+        if (!ShellMaterials.TryGetValue(step, out var id))
+            ShellMaterials[step] = id = UnlitMaterials.Get("Square", (float)Math.Pow(2, step / 4.0) / 0.3f);
+        return id;
     }
 
     private static void UpdateBolts(Vector3D camera, float intensity, double now)
