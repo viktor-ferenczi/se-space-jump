@@ -159,6 +159,9 @@ public sealed partial class Cloud
         for (var layer = 0; layer < FrontShroudLayers; layer++)
             MyTransparentGeometry.AddPointBillboard(Materials[layer % Materials.Length], new Vector4(color * alpha, alpha), position, radius * (1f - 0.1f * layer), (float)(now - CreatedAt) * 0.05f + 2.1f * layer);
 
+        // Black, never lit by the discharges: lit evenly, it would show the ship's outline in every flash
+        DrawCore(direction, distance, depth, position, portal, new Vector4(SmokeColor * alpha, alpha));
+
         // The discharges among the black fog at the hull light the fog in front of the ship instead: drawn at the
         // front shroud's depth, which no part of the hull reaches, so their light never shows the hull's outline
         var frontLight = FrontLight(cameraPosition, shroud);
@@ -181,6 +184,39 @@ public sealed partial class Cloud
             for (var layer = 0; layer < 2; layer++)
                 MyTransparentGeometry.AddPointBillboard(Materials[(layer + 1) % Materials.Length], new Vector4(glow, 0f), glowPosition, patch.Radius * scale * (0.9f - 0.25f * layer), patch.Phase + 2.4f * layer);
         }
+    }
+
+    /// <summary>
+    /// The wispy layers of the front shroud still let a sunlit or lit hull through from afar: behind them an opaque
+    /// ellipse, opaque over the ship's whole silhouette (its box as this camera sees it, with a margin) and its soft rim
+    /// in the fog around the ship, never wider than the portal
+    /// </summary>
+    private void DrawCore(Vector3D direction, double distance, double depth, Vector3D position, double portal, Vector4 color)
+    {
+        // The ship's box in the world: its axes scaled by its half extents
+        var box = Shape.LocalBox;
+        var axes = new[] { frame.Right * box.HalfExtents.X, frame.Up * box.HalfExtents.Y, frame.Backward * box.HalfExtents.Z };
+        var longest = axes[0];
+        foreach (var axis in axes)
+        {
+            if (Vector3D.Reject(axis, direction).LengthSquared() > Vector3D.Reject(longest, direction).LengthSquared())
+                longest = axis;
+        }
+
+        var u = Vector3D.Reject(longest, direction);
+        if (u.LengthSquared() < 1e-6)
+            u = Vector3D.CalculatePerpendicularVector(direction);
+        u.Normalize();
+        var v = Vector3D.Cross(direction, u);
+
+        // Half extents of the box seen along u and v; an ellipse through the corners of that rectangle covers it
+        double Extent(Vector3D w) => Math.Abs(Vector3D.Dot(axes[0], w)) + Math.Abs(Vector3D.Dot(axes[1], w)) + Math.Abs(Vector3D.Dot(axes[2], w));
+        var near = depth / Math.Max(distance - Shape.LocalBox.HalfExtents.Length(), 1.0);
+        var limit = 0.95 * depth * Math.Tan(Math.Asin(Math.Min(portal / distance, 1.0)));
+        var scale = Math.Sqrt(2.0) * CoreMargin / SoftDisc.OpaqueRadius * near;
+        var width = (float)Math.Min(Extent(u) * scale, limit);
+        var height = (float)Math.Min(Extent(v) * scale, limit);
+        MyTransparentGeometry.AddBillboardOriented(SoftDisc.Material, color, position, (Vector3)u, (Vector3)v, width, height);
     }
 
     /// <summary>
@@ -249,6 +285,22 @@ public sealed partial class Cloud
         // From the ship's front half on: what is beside or behind the hull from this camera
         var behind = SmoothStep((float)((distance - (shroudCenterDistance - shroudShipRadius * 0.5)) / shroudShipRadius));
         return behind * shroudNow;
+    }
+
+    /// <summary>
+    /// 0..1, how much of its ship the cloud hides now, for the lights and flames that no smoke hides (see
+    /// <see cref="Cover"/>): as the extra layers at the hull, torn away with the cloud at an abort; none once the ship
+    /// left (it is in its destination cloud then)
+    /// </summary>
+    public float ShipCover(double now)
+    {
+        if (Shape == null || !Started || Finished || Grid == null || Kind == CloudKind.Provisional || Detached)
+            return 0f;
+
+        if (Kind == CloudKind.Origin && Aborted)
+            return SmoothStep((float)((abortedAt - (JumpAt - 3.0)) / 1.5)) * (1f - SmoothStep((float)(now - abortedAt) / 0.8f));
+
+        return Shroud(now);
     }
 
     /// <summary>0..1, how much of the extra layers at the hull are drawn: while the ship is inside the cloud</summary>

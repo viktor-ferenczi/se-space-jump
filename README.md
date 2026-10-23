@@ -11,10 +11,13 @@ counts down to the jump in place of the usual one, and the location markers flic
 
 The smoke stays out of pressurized rooms, so from inside the ship you only see it through the windows. Inside the
 cloud nothing of the outside shows through it: no planets, asteroids, stars or other ships, only at its edges while it
-gathers and breaks up.
+gathers and breaks up. Seen from outside, the cloud hides the ship completely before it jumps and as it arrives: its
+hull, its lights and the flames of its thrusters go dark in the smoke, so nothing changes when the ship is gone.
 
-In third person view the camera gets its own cloud while your ship jumps. Wherever the camera is, you see only
-smoke and lightning until the ship comes out at the other end.
+In third person view the camera goes into the fog with your ship while it jumps, from the start of the countdown.
+Nothing outside the cloud shows, only smoke and lightning, until the ship comes out at the other end. Your ship is
+in the fog with you: up close you still see it, its lights and the flames of its thrusters, and the farther the camera
+is from it, the deeper it fades into the smoke.
 
 In multiplayer the plugin works on your own client only. You see and hear every jump near you, whether or not the
 other players have the plugin.

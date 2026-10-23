@@ -55,6 +55,9 @@ public sealed partial class Cloud
     // ship, sized to the ship's silhouette
     private const int FrontShroudLayers = 3;
 
+    // Behind them an opaque core: opaque out to this many times the ship's outline, as far as the portal allows
+    private const double CoreMargin = 1.1;
+
     // Leaking fog: one wisp flows out this far (portal radii) over its cycle
     private const float LeakDistance = 0.35f;
 
@@ -515,12 +518,12 @@ public sealed partial class Cloud
 
         // Torn apart with the cloud
         if (Aborted)
-            return Kind == CloudKind.Origin ? FormingAround(abortedAt) * (1f - SmoothStep((float)(now - abortedAt) / 0.8f)) : 0f;
+            return Kind == CloudKind.Origin ? FogAround(abortedAt) * (1f - SmoothStep((float)(now - abortedAt) / 0.8f)) : 0f;
 
         switch (Kind)
         {
             case CloudKind.Origin:
-                return Detached ? 0f : FormingAround(now);
+                return Detached ? 0f : FogAround(now);
             case CloudKind.Destination:
                 return 1f - SmoothStep((float)((now - StartedAt - 0.6) / 4.0));
             default:
@@ -579,6 +582,10 @@ public sealed partial class Cloud
     }
 
     private float FormingAround(double now) => SmoothStep((float)((now - (JumpAt - 5.5)) / 4.5));
+
+    // The camera's fog forms from the countdown's start, with the cloud, fully formed a second before the jump (it takes
+    // over from the cloud while both are thin)
+    private float FogAround(double now) => SmoothStep((float)((now - StartedAt) / Math.Max(1.0, JumpAt - 1.0 - StartedAt)));
 
     private static float SmoothStep(float x)
     {
