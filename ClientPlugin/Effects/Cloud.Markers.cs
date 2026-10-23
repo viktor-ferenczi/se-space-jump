@@ -7,7 +7,7 @@ public sealed partial class Cloud
 {
     // In transit (from 3 s before the jump to 2 s after it) the markers are gone: they flicker out in the second
     // before it and back in in the second after it, around these times relative to the jump
-    private const double MarkersOutAt = -3.5;
+    public const double MarkersOutAt = -3.5;
     private const double MarkersInAt = 2.5;
 
     /// <summary>

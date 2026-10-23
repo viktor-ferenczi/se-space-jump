@@ -7,8 +7,9 @@ inside it. By the time the ship jumps it is out of sight. The cloud stays behind
 comes out inside a cloud of the same smoke at the other end. An aborted jump tears the cloud apart.
 
 The jump sounds are new as well, and the game's music goes quieter while a jump is heard. On board, the HUD message
-says what the gate is doing in place of the usual countdown: Manifesting Gate, then In Transit from 5 seconds before
-the jump to 5 seconds after it, then Jump Complete. The location markers flicker out until the ship arrives.
+says what the gate is doing in place of the usual countdown: Manifesting Gate, then In Transit from 4 seconds before
+the jump, as the location markers flicker out, to 5 seconds after it, then Jump Complete. Both count down the seconds
+to the end of the transit, 15 at the start of the countdown. The markers stay out until the ship arrives.
 
 The smoke stays out of pressurized rooms, so from inside the ship you only see it through the windows. Inside the
 cloud nothing of the outside shows through it: no planets, asteroids, stars or other ships, only at its edges while it

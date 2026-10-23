@@ -138,19 +138,24 @@ public static class JumpEffects
         Log.Debug($"Aborted: {grid.DisplayName} ({grid.EntityId})");
     }
 
-    // The HUD message of the camera's own jump (it replaces the vanilla countdown): the gate manifests until TransitFrom
-    // before the jump, the ship is in transit from then until TransitFrom after it (the smoke hides it then, and the
-    // world outside), and the jump is complete for CompleteFor more
-    private const double TransitFrom = 5;
+    // The HUD message of the camera's own jump (it replaces the vanilla countdown): the gate manifests until the HUD
+    // markers flicker out (Cloud.MarkersOutAt, rounded down to the second: their flicker starts there), the ship is in
+    // transit from then until TransitUntil after the jump (the smoke hides it then, and the world outside), and the jump
+    // is complete for CompleteFor more. Both phases count down the seconds to the end of the transit, as the vanilla
+    // countdown does to the jump
+    private static readonly double TransitFrom = Math.Floor(Cloud.MarkersOutAt);
+    private const double TransitUntil = 5;
     private const double CompleteFor = 3;
 
     private static string JumpMessage(double? t)
     {
-        if (t is not double since || since >= TransitFrom + CompleteFor)
+        if (t is not double since || since >= TransitUntil + CompleteFor)
             return null;
-        if (since >= TransitFrom)
+        if (since >= TransitUntil)
             return "Jump Complete";
-        return since >= -TransitFrom ? "In Transit" : "Manifesting Gate";
+
+        var left = (int)Math.Ceiling(TransitUntil - since);
+        return $"{(since >= TransitFrom ? "In Transit" : "Manifesting Gate")} ({left} s)";
     }
 
     /// <summary>Seconds since the jump of the camera's grid (negative in the countdown), null when it is not jumping</summary>
