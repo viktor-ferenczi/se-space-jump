@@ -54,15 +54,6 @@ public static class NotificationPatches
         if (text == jumpMessageText)
             return;
 
-        // The next second of the countdown, or the next phase: the same message, so it does not blink
-        if (jumpMessage != null && text != null)
-        {
-            jumpMessageText = text;
-            jumpMessage.SetTextFormatArguments(text);
-            Log.Debug($"Jump message: {text} (t{jumpTime:+0.00;-0.00})");
-            return;
-        }
-
         if (jumpMessage != null)
             MyHud.Notifications.Remove(jumpMessage);
         jumpMessage = null;
