@@ -11,7 +11,8 @@ namespace ClientPlugin.Patches;
 /// <summary>
 /// Dims the sun behind a cloud. The sun disc is drawn into the sky in the lighting pass, so bright that the smoke
 /// billboards drawn over it would let it shine through; its intensity and the sun's glare follow
-/// <see cref="JumpEffects.SunVisibility"/> instead.
+/// <see cref="JumpEffects.SunVisibility"/> instead. In the void with a jumping ship the sun and the sky stop lighting
+/// the scene (<see cref="JumpEffects.VoidDarkness"/>).
 /// </summary>
 [HarmonyPatch]
 [SuppressMessage("ReSharper", "UnusedType.Global")]
@@ -36,7 +37,32 @@ public static class SunPatches
             data.EnvironmentLight.SunDiscColor *= brightness;
             data.EnvironmentLight.SunDiscColor2 *= brightness;
         }
+
+        // In the void with the jumping ship neither the sun nor the sky lights it: the discharges do (FlashLights), and
+        // its own lights
+        var dark = JumpEffects.VoidDarkness;
+        if (dark > 0f)
+        {
+            if (Log.DebugEnabled && JumpEffects.Now - lastVoidLogAt >= 0.5)
+            {
+                lastVoidLogAt = JumpEffects.Now;
+                Log.Debug($"Void light: darkness {dark:0.00}, sun colour x{1f - dark:0.00} of {data.EnvironmentLight.SunColorRaw.X:0.0}");
+            }
+
+            var sun = 1f - dark;
+            var sky = 1f - dark * (1f - VoidAmbient);
+            // The shaders light with the sun's colour (directionalLightColor), its factors scale only parts of it
+            data.EnvironmentLight.SunColorRaw *= sun;
+            data.EnvironmentLight.SunSpecularColorRaw *= sun;
+            data.EnvironmentLight.AmbientDiffuseFactor *= sky;
+            data.EnvironmentLight.AmbientSpecularFactor *= sky;
+        }
     }
+
+    private static double lastVoidLogAt;
+
+    // The share of the sky's ambient light left in the void: none, the eye adaptation brings out what the discharges light
+    private const float VoidAmbient = 0f;
 
     [HarmonyPrefix]
     [HarmonyPatch(typeof(MySector), nameof(MySector.UpdateSunLight))]

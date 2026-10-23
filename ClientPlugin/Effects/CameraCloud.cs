@@ -1,7 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using Sandbox.Game.Lights;
 using Sandbox.Game.World;
 using VRage.Game;
 using VRage.Utils;
@@ -11,9 +9,9 @@ using VRageRender;
 namespace ClientPlugin.Effects;
 
 /// <summary>
-/// The cloud around a camera that jumps with the ship and looks at it from outside (the third person camera, a camera
-/// block on the hull): the camera goes into the void with its ship. The void is a sphere around the ship's portal that
-/// grows to take the camera in. Inside it the whole world is fog of one density: the ship, in the void with the camera,
+/// The cloud around a camera block on the hull of a jumping ship, looking at it from outside: the camera goes into the
+/// void with its ship (the third person camera gets a smoke gate instead, see <see cref="CloudKind.Camera"/>). The void
+/// is a sphere around the ship's portal that grows to take the camera in. Inside it the whole world is fog of one density: the ship, in the void with the camera,
 /// shows through it as through fog, its parts near the camera clearly, the farther ones dimmer, so zooming in on it
 /// brings it out of the fog bit by bit. Beyond the void's surface the fog is thick: everything outside the gate
 /// (planets, asteroids, the sun) is left behind. Other ships that do not jump are hidden as the fog forms (see
@@ -89,12 +87,6 @@ public static class CameraCloud
     private const float FarFlashSize = 0.45f;
     private const float FarFlashGlow = 0.6f;
 
-    // The brightest far discharges light the ship: this many point lights at most, reaching this far beyond the region
-    // the discharge lights, at this intensity for a discharge at its peak
-    private const int FlashLightCount = 4;
-    private const float FlashLightReach = 8f;
-    private const float FlashLightIntensity = 6f;
-
     private static MyStringId? material;
     private static MyStringId Material => material ??= UnlitMaterials.Get("Smoke");
 
@@ -146,7 +138,6 @@ public static class CameraCloud
     // Their Local is relative to the void's centre: they stay in the fog when the camera moves
     private static readonly List<FlashPatch> FarFlashes = new List<FlashPatch>();
     private static double nextFarFlashAt;
-    private static readonly MyLight[] FlashLights = new MyLight[FlashLightCount];
     private static readonly Random Random = new Random();
     private static double nextBoltAt;
     private static double nextFlashAt;
@@ -214,15 +205,6 @@ public static class CameraCloud
         Bolts.Clear();
         Flashes.Clear();
         FarFlashes.Clear();
-        for (var i = 0; i < FlashLights.Length; i++)
-        {
-            if (FlashLights[i] == null)
-                continue;
-
-            MyLights.RemoveLight(FlashLights[i]);
-            FlashLights[i] = null;
-        }
-
         Current = default;
     }
 
@@ -252,7 +234,6 @@ public static class CameraCloud
         DrawLayers(Current, fog);
         DrawShells(Current, fog);
         DrawFarFlashes(Current, now);
-        UpdateFlashLights(Current, now);
 
         var drift = Quaternion.CreateFromAxisAngle(Vector3.Up, (float)(now * 0.04));
         var flashTint = Palette.Flash;
@@ -392,43 +373,12 @@ public static class CameraCloud
         }
     }
 
-    private static void UpdateFlashLights(Space fog, double now)
+    /// <summary>The far discharges, for the light they cast on the ship (see <see cref="FlashLights"/>)</summary>
+    public static void AddLightSources(double now)
     {
-        var tint = Palette.Flash;
-        var color = new Vector4(tint / Math.Max(1e-3f, Math.Max(tint.X, Math.Max(tint.Y, tint.Z))), 1f);
-        var brightest = FarFlashes.Select(patch => (Patch: patch, Brightness: patch.Brightness(now))).Where(f => f.Brightness > 0.02f).OrderByDescending(f => f.Brightness)
-            .Take(FlashLightCount).ToList();
-        for (var i = 0; i < FlashLights.Length; i++)
-        {
-            var light = FlashLights[i];
-            if (i >= brightest.Count)
-            {
-                if (light != null && light.LightOn)
-                {
-                    light.LightOn = false;
-                    light.UpdateLight();
-                }
-
-                continue;
-            }
-
-            if (light == null)
-            {
-                light = FlashLights[i] = MyLights.AddLight();
-                if (light == null)
-                    return;
-
-                light.Start($"{Plugin.Name} flash");
-            }
-
-            var (patch, brightness) = brightest[i];
-            light.Position = fog.Center + patch.Local;
-            light.Color = color;
-            light.Range = patch.Radius + FlashLightReach;
-            light.Intensity = FlashLightIntensity * brightness;
-            light.LightOn = true;
-            light.UpdateLight();
-        }
+        var fog = Current;
+        foreach (var patch in FarFlashes)
+            FlashLights.Sources.Add((fog.Center + patch.Local, patch.Radius, patch.Brightness(now)));
     }
 
     private static void UpdateBolts(Vector3D camera, float intensity, double now)

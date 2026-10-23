@@ -18,6 +18,12 @@ public enum CloudKind
 
     /// <summary>Stand-in at the broadcast jump target until the arriving grid has been replicated to this client</summary>
     Provisional,
+
+    /// <summary>
+    /// The smoke gate around a third person camera that jumps with its ship: forms after the ship's cloud, follows the
+    /// camera, and clears with the ship's cloud at the exit (see JumpEffects.Draw)
+    /// </summary>
+    Camera,
 }
 
 /// <summary>
@@ -213,6 +219,7 @@ public sealed partial class Cloud
 
     // Per frame clamping: the ship's frame (sealed rooms of the jumping grids) and the frames of the obstacle grids
     private bool clampToShip;
+    private CloudShape clampShape;
     private MatrixD worldToShip;
     private float shipClampRelax;
     private readonly List<(AirMap Map, MatrixD WorldToGrid)> obstacleFrames = new List<(AirMap, MatrixD)>();
@@ -565,9 +572,21 @@ public sealed partial class Cloud
         if (inside <= 0f)
             return 0f;
 
+        // The camera's gate closes the view as the void's fog does, the world outside gone well before its smoke has
+        // formed; its backdrop far beyond its shell, so the smoke in front, not the backdrop, makes the view's colour
+        // (the renderer averages the transparent billboards over a pixel, nearer ones weighed more)
+        if (Kind == CloudKind.Camera)
+        {
+            distance = radius * GateBackdrop;
+            return inside * (1f - CameraCloud.OutsideTransmission(gateFormation));
+        }
+
         distance = Vector3D.Dot(toCenter, forward) + radius;
         return inside * Formed(now);
     }
+
+    /// <summary>0..1, how far the smoke has formed, following the puffs' opacity over the cloud's life</summary>
+    public float Formation(double now) => Shape == null || !Started || Finished ? 0f : Formed(now);
 
     /// <summary>0..1, how far the smoke has formed, following the puffs' opacity over the cloud's life (Evaluate)</summary>
     private float Formed(double now)
@@ -582,6 +601,8 @@ public sealed partial class Cloud
             case CloudKind.Origin:
                 formed = Detached ? FormingAround(detachedAt) * (1f - SmoothStep((float)(now - detachedAt - 0.6) / 3.5f)) : FormingAround(now);
                 break;
+            case CloudKind.Camera:
+                return gateFormation;
             case CloudKind.Destination:
                 formed = (seamless ? 1f : SmoothStep(age / 0.25f)) * (1f - SmoothStep((age - 0.6f) / 4.0f));
                 if (!double.IsNaN(takeOverAt) && !natural)
@@ -638,6 +659,12 @@ public sealed partial class Cloud
     /// <summary>Opacity, size and position of a puff now, in the cloud's frame</summary>
     private void Evaluate(ref Puff puff, double now, out float alpha, out float radius, out Vector3D local)
     {
+        if (Kind == CloudKind.Camera)
+        {
+            EvaluateGate(ref puff, now, out alpha, out radius, out local);
+            return;
+        }
+
         local = puff.Position;
         radius = puff.Radius;
 
@@ -764,11 +791,15 @@ public sealed partial class Cloud
     /// </summary>
     private void PrepareClamping()
     {
-        clampToShip = Grid != null && !Grid.MarkedForClose && Shape.MapCount != 0 && (attached || Kind == CloudKind.Destination);
+        // A camera's gate keeps out of its ship's sealed rooms as the ship's cloud does
+        var ship = Kind == CloudKind.Camera ? gateOf : this;
+        clampShape = ship.Shape;
+        clampToShip = ship.Grid != null && !ship.Grid.MarkedForClose && clampShape != null && clampShape.MapCount != 0 &&
+                      (Kind == CloudKind.Camera || attached || Kind == CloudKind.Destination);
         shipClampRelax = 0f;
         if (clampToShip)
         {
-            worldToShip = MatrixD.Invert(Grid.WorldMatrix);
+            worldToShip = MatrixD.Invert(ship.Grid.WorldMatrix);
         }
         else if (Detached && Shape.MapCount != 0)
         {
@@ -796,7 +827,7 @@ public sealed partial class Cloud
 
     private float WorldAllowed(Vector3D world, out float byShip, out float byObstacles)
     {
-        byShip = clampToShip ? Shape.AllowedRadius(Vector3D.Transform(world, worldToShip)) + shipClampRelax : float.MaxValue;
+        byShip = clampToShip ? clampShape.AllowedRadius(Vector3D.Transform(world, worldToShip)) + shipClampRelax : float.MaxValue;
         byObstacles = float.MaxValue;
         foreach (var (map, worldToGrid) in obstacleFrames)
         {
