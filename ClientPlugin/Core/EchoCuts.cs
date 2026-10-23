@@ -3,7 +3,7 @@ using System;
 namespace ClientPlugin.Core;
 
 /// <summary>
-/// The hyperspace echoes, cut from the plugin's own roar (Assets/Sounds/roar.wav and roar.far.wav) on the player's
+/// The hyperspace echoes, cut from the plugin's own roar (Assets/roar.wav and roar.far.wav) on the player's
 /// machine, not shipped: the wails are short stretches of the roar with its low drone filtered out, so its howling tones
 /// stand out; the echoes are longer swells of the whole roar. Each fades in and out softly and repeats itself a few
 /// times, quieter each time; the peak at -3 dBFS. The roar is a seamless loop: a cut may run over its end into its start.

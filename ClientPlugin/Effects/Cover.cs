@@ -13,7 +13,8 @@ namespace ClientPlugin.Effects;
 /// on top of everything, tested only against the opaque scene. While a cloud hides its ship, the flames and glares of
 /// the ship's thrusters and of its lights in open air (not those in sealed rooms) fade as the ship disappears; for a
 /// camera inside the smoke every glare beyond the backdrop closing its view fades with the backdrop, and in the fog of a
-/// third person camera (see CameraCloud) every flame and glare fades with its distance, its own ship's too. Built on the main
+/// third person camera (see CameraCloud) every flame and glare fades with its distance, its own ship's too. The lights and
+/// flames of the grids that do not jump fade as the smoke covers them from a camera on board (see OutsideGrids). Built on the main
 /// thread every frame, read by the render thread (see CoverPatches): the snapshot is replaced, never changed.
 /// </summary>
 public static class Cover
@@ -47,6 +48,7 @@ public static class Cover
     private const double Reach = 2.5;
 
     private static readonly List<Place> Building = new List<Place>();
+    private static readonly List<(Vector3D Center, double Radius)> OutsideLights = new List<(Vector3D, double)>();
 
     /// <summary>Render thread: 0..1, how much of a glare or flame at this position is left</summary>
     public static float Keep(Vector3D position)
@@ -101,6 +103,11 @@ public static class Cover
                 }
             }
         }
+
+        OutsideLights.Clear();
+        OutsideGrids.AddLights(OutsideLights);
+        foreach (var (center, radius) in OutsideLights)
+            Building.Add(new Place(center, radius + Reach, 1f - OutsideGrids.CoverNow));
 
         current = new Snapshot
         {
