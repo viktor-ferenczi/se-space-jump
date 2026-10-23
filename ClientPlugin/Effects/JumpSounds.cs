@@ -26,14 +26,14 @@ public enum JumpSound
     /// <summary>The roar from a thin, small or distant cloud, crossfaded with <see cref="Cruising"/></summary>
     CruisingFar,
 
-    /// <summary>The gate inhaling: once before the jump, timed to end at it</summary>
-    PreJump,
-
-    /// <summary>The jump: once at the cloud left behind and once at the exit, there also for the pilots who arrive</summary>
+    /// <summary>The jump's rumble: once at the cloud left behind and once at the exit, there also for the pilots who arrive</summary>
     Jump,
 
-    /// <summary>The gate closing: once when a cloud starts to linger and fade</summary>
-    Closing,
+    /// <summary>A wail of the gate, heard inside it from right before the jump on: one of several variants at random, a stream of them</summary>
+    Wail,
+
+    /// <summary>A roar of the gate echoing, from right before the jump on: one of several variants at random, now and then</summary>
+    Echo,
 
     /// <summary>An aborted jump: once at the cloud torn apart</summary>
     Abort,
@@ -50,9 +50,10 @@ public enum JumpSound
 
 /// <summary>
 /// Sound slots of the gate. The jump is heard from the gate, the cloud, by the pilots and the observers alike: the jump
-/// drives themselves are silent. Each stage has its one sound, the plugin's file in Assets/Sounds; the discharges are
-/// the game's own lightning, cut from its files (<see cref="LightningCuts"/>). <see cref="GateSound"/> plays the gate's
-/// phases at each cloud, the cloud its discharges.
+/// drives themselves are silent. Each stage has its one sound, the plugin's file in Assets/Sounds; the wails and echoes
+/// are cut from the plugin's roar (<see cref="EchoCuts"/>), the discharges from the game's own lightning
+/// (<see cref="LightningCuts"/>). <see cref="GateSound"/> plays the gate's phases and echoes at each cloud, the cloud
+/// its discharges.
 /// </summary>
 public static class JumpSounds
 {
@@ -62,7 +63,7 @@ public static class JumpSounds
     // A jump is heard at the clouds up to this far
     private const float CloudMaxDistance = 2000f;
 
-    // Variants of a discharge: name1.wav .. name9.wav
+    // Variants of a discharge, wail or echo: name1.wav .. name9.wav
     private const int MaxVariants = 9;
 
     private static readonly JumpSound[] Slots = (JumpSound[])Enum.GetValues(typeof(JumpSound));
@@ -78,17 +79,20 @@ public static class JumpSounds
     /// </summary>
     private static readonly Dictionary<JumpSound, (string File, float Volume)> StageSounds = new Dictionary<JumpSound, (string, float)>
     {
-        [JumpSound.Opening] = ("opening/spoolup", 0.392f),
-        [JumpSound.Cruising] = ("cruising/ed-roar", 0.75f),
-        [JumpSound.CruisingFar] = ("cruising/ed-roar.far", 0.75f),
-        [JumpSound.PreJump] = ("prejump/spoolup", 0.616f),
-        [JumpSound.Jump] = ("jump/ed-burst", 1.0f),
-        [JumpSound.Closing] = ("closing/ed-dissipate", 0.55f),
-        [JumpSound.Abort] = ("abort/tear-discharge", 1.0f),
+        [JumpSound.Opening] = ("spoolup", 0.392f),
+        [JumpSound.Cruising] = ("roar", 0.75f),
+        [JumpSound.CruisingFar] = ("roar.far", 0.75f),
+        [JumpSound.Jump] = ("burst", 1.0f),
+        [JumpSound.Abort] = ("tear-discharge", 1.0f),
     };
 
     // The lightning plays 4 dB under the stage sounds
     private const float LightningVolume = 0.631f;
+
+    // The stream of wails about 5 dB under the lightning's strikes and 4 dB under the roar, the echoes a little louder
+    // but now and then; each one a few semitones higher or lower at random (cue pitch variation, cents)
+    private const float WailVolume = 0.3f, EchoVolume = 0.4f;
+    private const float WailPitchVariation = 300f, EchoPitchVariation = 200f;
 
     /// <summary>At the start of a session: resolves the slots, registers the sound files and silences the jump drives</summary>
     public static void Apply()
@@ -122,11 +126,19 @@ public static class JumpSounds
 
     private static bool IsLoop(JumpSound slot) => slot == JumpSound.Cruising || slot == JumpSound.CruisingFar;
 
+    public static bool IsEcho(JumpSound slot) => slot == JumpSound.Wail || slot == JumpSound.Echo;
+
     private static MySoundPair Resolve(JumpSound slot)
     {
         if (IsDischarge(slot))
         {
             var files = GameLightningFiles(slot.ToString().ToLowerInvariant());
+            return files.Count != 0 ? FilePair(slot, files.ToArray()) : MySoundPair.Empty;
+        }
+
+        if (IsEcho(slot))
+        {
+            var files = EchoFiles(slot.ToString().ToLowerInvariant());
             return files.Count != 0 ? FilePair(slot, files.ToArray()) : MySoundPair.Empty;
         }
 
@@ -178,6 +190,49 @@ public static class JumpSounds
         return files;
     }
 
+    /// <summary>The wails and echoes cut from the plugin's roar (<see cref="EchoCuts"/>), made once in the plugin's storage</summary>
+    public static string EchoFolder => Path.Combine(MyFileSystem.UserDataPath, "Storage", Plugin.Name, "Echoes");
+
+    // Bump to make the files again after a change of the cuts or of the roar
+    private const string EchoVersion = "1435-v01";
+
+    private static List<string> EchoFiles(string name)
+    {
+        var files = new List<string>();
+        if (AssetFolder == null)
+        {
+            Log.Info($"Echoes: no asset folder to cut {name} from, silent");
+            return files;
+        }
+
+        try
+        {
+            var folder = EchoFolder;
+            var stamp = Path.Combine(folder, "version.txt");
+            if (!File.Exists(stamp) || File.ReadAllText(stamp).Trim() != EchoVersion)
+            {
+                Directory.CreateDirectory(folder);
+                foreach (var (file, source, start, length, highPass, fadeIn, fadeOut, taps) in EchoCuts.Cuts)
+                    LightningCuts.WriteWav(Path.Combine(folder, file + ".wav"), EchoCuts.Cut(LightningCuts.ReadWav(Path.Combine(AssetFolder, "Sounds", source + ".wav")), start, length, highPass, fadeIn, fadeOut, taps));
+                File.WriteAllText(stamp, EchoVersion);
+                Log.Info($"Echoes cut from the roar into {folder}");
+            }
+
+            for (var i = 1; i <= MaxVariants; i++)
+            {
+                var variant = Path.Combine(folder, $"{name}{i}.wav");
+                if (File.Exists(variant))
+                    files.Add(variant);
+            }
+        }
+        catch (Exception e)
+        {
+            Log.Info($"Echoes: cannot cut them from the roar: {e.Message}");
+        }
+
+        return files;
+    }
+
     private static MySoundPair FilePair(JumpSound slot, params string[] paths)
     {
         var missing = paths.FirstOrDefault(path => !File.Exists(path));
@@ -188,7 +243,8 @@ public static class JumpSounds
         }
 
         var cue = $"{Plugin.Name}_{slot}";
-        if (!RegisterCue(cue, paths, CloudMaxDistance, IsLoop(slot)))
+        var pitchVariation = slot == JumpSound.Wail ? WailPitchVariation : slot == JumpSound.Echo ? EchoPitchVariation : 0f;
+        if (!RegisterCue(cue, paths, CloudMaxDistance, IsLoop(slot), pitchVariation))
             return MySoundPair.Empty;
 
         Log.Debug($"Sound {cue}: {string.Join(", ", paths)}");
@@ -197,9 +253,9 @@ public static class JumpSounds
 
     /// <summary>
     /// Adds a 3D cue to the loaded cue bank, the same as an audio definition of a mod would: one of the files at random,
-    /// or a loop of the first file
+    /// or a loop of the first file; pitch variation in cents, at random for each sound played
     /// </summary>
-    private static bool RegisterCue(string cue, string[] paths, float maxDistance, bool loop)
+    private static bool RegisterCue(string cue, string[] paths, float maxDistance, bool loop, float pitchVariation)
     {
         try
         {
@@ -218,6 +274,7 @@ public static class JumpSounds
                 MaxDistance = maxDistance,
                 Volume = 1f,
                 Loopable = loop,
+                PitchVariation = pitchVariation,
                 Waves = loop
                     ? new List<MyAudioWave> { new MyAudioWave { Type = MySoundDimensions.D3, Loop = paths[0] } }
                     : paths.Select(path => new MyAudioWave { Type = MySoundDimensions.D3, Start = path }).ToList(),
@@ -247,7 +304,7 @@ public static class JumpSounds
     /// The volume of a slot (emitter volume multiplier), which balances the gate's sounds to each other. The loops and
     /// the discharges are scaled further by the cloud's state.
     /// </summary>
-    public static float Volume(JumpSound slot) => IsDischarge(slot) ? LightningVolume : StageSounds[slot].Volume;
+    public static float Volume(JumpSound slot) => IsDischarge(slot) ? LightningVolume : slot == JumpSound.Wail ? WailVolume : slot == JumpSound.Echo ? EchoVolume : StageSounds[slot].Volume;
 
     // A sound quieter than this is not started: only a discharge far away is that quiet
     private const float Inaudible = 0.015f;
@@ -260,8 +317,8 @@ public static class JumpSounds
     private static int nextStrikeEmitter;
     private static int nextFlashEmitter;
 
-    /// <summary>Discharges heard in this session, for the debug log</summary>
-    public static int StrikesPlayed, SnapsPlayed, FlashesPlayed;
+    /// <summary>Discharges, wails and echoes heard in this session, for the debug log</summary>
+    public static int StrikesPlayed, SnapsPlayed, FlashesPlayed, WailsPlayed, EchoesPlayed;
 
     // Discharges seen in the render frame, played in the next simulation frame
     private static readonly List<(Vector3D Position, JumpSound Slot, float Cutoff, float Volume)> Discharges =
