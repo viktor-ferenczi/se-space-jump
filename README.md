@@ -9,7 +9,9 @@ comes out inside a cloud of the same smoke at the other end. An aborted jump tea
 The jump sounds are new as well, and the game's music goes quieter while a jump is heard. On board, the HUD message
 counts down to the jump in place of the usual one, and the location markers flicker out until the ship arrives.
 
-The smoke stays out of pressurized rooms, so from inside the ship you only see it through the windows.
+The smoke stays out of pressurized rooms, so from inside the ship you only see it through the windows. Inside the
+cloud nothing of the outside shows through it: no planets, asteroids, stars or other ships, only at its edges while it
+gathers and breaks up.
 
 In third person view the camera gets its own cloud while your ship jumps. Wherever the camera is, you see only
 smoke and lightning until the ship comes out at the other end.

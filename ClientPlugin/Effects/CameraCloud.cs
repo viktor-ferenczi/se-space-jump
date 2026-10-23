@@ -37,9 +37,8 @@ public static class CameraCloud
     // in front of them)
     private const float FarGlow = 0.2f;
 
-    // Behind the puffs, at the shell's outer edge: dark layers facing the camera, together hiding everything farther away
-    // (the sky, other ships) at full intensity. The smoke texture is wispy, about 0.6 opaque where it is dense, so each
-    // layer's alpha makes up for that.
+    // Behind the puffs, at the shell's outer edge: dark layers facing the camera, and behind them the opaque Backdrop. The
+    // smoke texture is wispy, about 0.6 opaque where it is dense, so each layer's alpha makes up for that.
     private const int BackdropLayers = 6;
     private const float BackdropDistance = Radius + 4f;
     private const float TextureOpacity = 0.6f;
@@ -140,6 +139,9 @@ public static class CameraCloud
             MyTransparentGeometry.AddBillboardOriented(Material, color, matrix.Translation + matrix.Forward * distance,
                 Vector3.Transform(matrix.Left, rotation), Vector3.Transform(matrix.Up, rotation), distance * halfDiagonal * 2.6f);
         }
+
+        // The layers still let a little of a bright planet or asteroid through: behind them the view is closed
+        Backdrop.Draw(BackdropDistance + BackdropLayers, Backdrop.Opacity(intensity));
     }
 
     private static void UpdateBolts(Vector3D camera, float intensity, double now)
