@@ -1,4 +1,5 @@
-﻿using System.Reflection;
+﻿using System.Linq;
+using System.Reflection;
 using ClientPlugin.Effects;
 using ClientPlugin.Settings;
 using ClientPlugin.Settings.Layouts;
@@ -27,8 +28,21 @@ public class Plugin : IPlugin
         Instance = this;
         Instance.settingsGenerator = new SettingsGenerator();
 
+        // Class by class, so one patch that fails does not leave the rest out, and the game's log lists what is patched
         var harmony = new Harmony(Name);
-        harmony.PatchAll(Assembly.GetExecutingAssembly());
+        foreach (var type in AccessTools.GetTypesFromAssembly(Assembly.GetExecutingAssembly()))
+        {
+            try
+            {
+                harmony.CreateClassProcessor(type).Patch();
+            }
+            catch (System.Exception e)
+            {
+                Log.Info($"Patch of {type.Name} failed: {e.GetBaseException().Message}");
+            }
+        }
+
+        Log.Info($"Patched: {string.Join(", ", harmony.GetPatchedMethods().Select(m => $"{m.DeclaringType?.Name}.{m.Name}"))}");
     }
 
     /// <summary>Called by Pulsar with the plugin's asset folder (the AssetFolder asset of BlackSmoke.xml)</summary>
