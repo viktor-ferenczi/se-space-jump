@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Sandbox;
 using Sandbox.Game.Entities;
 using Sandbox.Game.GameSystems;
@@ -15,7 +16,8 @@ namespace ClientPlugin.Effects;
 
 /// <summary>
 /// Owns the clouds: starts them from the jump drive events, hides grids that jump in next to this client
-/// until their cloud has formed, draws everything and the cloud around a third person camera that jumps along.
+/// until their cloud has formed, draws everything, the smoke gate of a third person camera that jumps along and the fog
+/// of a camera block that does.
 /// </summary>
 public static class JumpEffects
 {
@@ -525,17 +527,18 @@ public static class JumpEffects
             var sunDirection = (Vector3D)MySector.SunProperties.SunDirectionNormalized;
             var wrapped = 0f;
             Cloud wrappingCloud = null;
+            var cameraBlock = MySession.Static?.CameraController is MyCameraBlock;
             foreach (var cloud in Clouds)
             {
                 if (Log.DebugEnabled && cloud.Kind == CloudKind.Origin && now - lastWrapLogAt >= 0.25)
                 {
                     lastWrapLogAt = now;
-                    Log.Debug($"Camera cloud: outside view jumping along {OutsideViewJumpsWith(cloud)}, open air {CameraInOpenAir(cloud, camera)}, intensity {cloud.CameraCloudIntensity(now):0.00}, {Vector3D.Distance(camera, cloud.Center):0} m from the cloud's centre, {NearestGrid(cloud, camera):0.0} m from the ship at t{now - cloud.JumpAt:+0.00;-0.00}");
+                    Log.Debug($"Camera cloud: outside view jumping along {OutsideViewJumpsWith(cloud)}, open air {CameraInOpenAir(cloud, camera)}, {(cameraBlock ? "fog" : "gate")} {(cameraBlock ? cloud.CameraCloudIntensity(now) : cloud.GateFormation(now)):0.00}, {Vector3D.Distance(camera, cloud.Center):0} m from the cloud's centre, {NearestGrid(cloud, camera):0.0} m from the ship at t{now - cloud.JumpAt:+0.00;-0.00}");
                 }
 
                 if (config.CameraOverlay && cloud.Kind != CloudKind.Provisional && OutsideViewJumpsWith(cloud) && CameraInOpenAir(cloud, camera))
                 {
-                    var intensity = cloud.CameraCloudIntensity(now);
+                    var intensity = cameraBlock ? cloud.CameraCloudIntensity(now) : cloud.GateFormation(now);
                     if (intensity > wrapped)
                     {
                         wrapped = intensity;
@@ -547,21 +550,43 @@ public static class JumpEffects
             if (wrappingCloud != null)
                 wrappingCloud.WrappedCamera = true;
 
-            // A camera wrapped in its own cloud sees nothing outside it, the other clouds neither. Its ship is in the fog with
-            // it, which forms with the ship's cloud from the countdown's start: the ship's own cloud is not drawn for this
-            // camera (its dense puffs at the hull would hide the ship, and let it come back as they faded), not even once
-            // the fog has cleared after the arrival (what is left of it would come in at once). A camera moved into a
-            // sealed room of the ship sees the cloud through the windows, as from the cockpit
-            foreach (var cloud in Clouds)
-                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, ReplacedForCamera(cloud, wrappingCloud, camera) ? 0f : 1f - wrapped, ref target);
+            // A camera block on the hull is wrapped in the void's fog (CameraCloud). The third person camera gets a smoke
+            // gate of its own instead, which follows it: it looks out into the smoke as from a window of its ship
+            if (wrappingCloud != null && !cameraBlock && wrapped > 0.005f)
+            {
+                if (gate == null || !gate.GateOf.GroupIds.Overlaps(wrappingCloud.GroupIds))
+                    gate = Cloud.CreateCameraGate(wrappingCloud, now);
+                gate.Follow(wrappingCloud, camera, now);
+            }
+            else
+            {
+                gate = null;
+            }
 
-            // A camera inside a cloud (a cockpit, a camera block, the hangar, anyone standing in it) sees nothing outside
-            // the smoke either. The third person camera in its void has the void's fog instead
+            var fogWrapped = cameraBlock ? wrapped : 0f;
+
+            // A camera wrapped in its own cloud's fog or gate sees nothing outside it, the other clouds neither. Its ship is
+            // with it. A camera block's fog forms with the ship's cloud from the countdown's start and stands in for it: the
+            // ship's own cloud is not drawn for it (its dense puffs at the hull would hide the ship, and let it come back as
+            // they faded), not even once the fog has cleared after the arrival (what is left of it would come in at once).
+            // The third person camera in its gate sees the ship's cloud at the departure and the exit as it forms and
+            // clears around the ship, without the layers that hide the ship from those outside (Cloud.Draw, aboard). A
+            // camera moved into a sealed room of the ship sees the cloud through the windows, as from the cockpit
+            foreach (var cloud in Clouds)
+            {
+                var replaced = ReplacedForCamera(cloud, wrappingCloud, camera);
+                var visibility = !replaced ? 1f - wrapped : cameraBlock ? 0f : 1f;
+                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, visibility, ref target, aboard: replaced);
+            }
+            gate?.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, 1f, ref target);
+
+            // A camera inside a cloud (a cockpit, a camera block, the hangar, anyone standing in it, the third person
+            // camera in its gate) sees nothing outside the smoke either. A camera block in the void has its fog instead
             var forward = MySector.MainCamera.WorldMatrix.Forward;
             var inside = 0f;
             var insideDistance = 0.0;
             Cloud insideCloud = null;
-            foreach (var cloud in Clouds)
+            foreach (var cloud in gate == null ? Clouds : Clouds.Append(gate))
             {
                 if (ReplacedForCamera(cloud, wrappingCloud, camera))
                     continue;
@@ -575,45 +600,65 @@ public static class JumpEffects
                 }
             }
 
-            // In a sealed room (a cockpit, a bridge camera) the room and the ship around it stay in front of the backdrop.
-            // A camera in the smoke itself (a camera block on the hull, anyone standing in it) sees nothing but smoke: the
-            // hull and the lights next to it would show through the puffs' gaps, so the backdrop comes in front of the
-            // ship, as near as that takes (the nearer, the more of the smoke's light it outweighs). Not for the third
-            // person camera in the fog with the ship: it sees the ship
+            // In a sealed room (a cockpit, a bridge camera) the room and the ship around it stay in front of the backdrop,
+            // as does the ship of the third person camera in its gate. A camera in the smoke itself (a camera block on the
+            // hull, anyone standing in it) sees nothing but smoke: the hull and the lights next to it would show through
+            // the puffs' gaps, so the backdrop comes in front of the ship, as near as that takes (the nearer, the more of
+            // the smoke's light it outweighs)
             var farBackdrop = Math.Max(Math.Max(insideDistance, CameraGridFarSide(camera, forward)), MinBackdropDistance);
             var backdropDistance = insideCloud != null && insideCloud != wrappingCloud && insideCloud.IsOpenAt(camera)
                 ? MathHelper.Clamp(NearestGrid(insideCloud, camera) - ShipClearance, NearestBackdropDistance, farBackdrop)
                 : farBackdrop;
-            var backdrop = Backdrop.Opacity(inside * (1f - wrapped) * Math.Min(1f, config.Darkness));
+            var backdrop = Backdrop.Opacity(inside * (1f - fogWrapped) * Math.Min(1f, config.Darkness));
             if (backdrop > 0.003f)
                 Backdrop.Draw(backdropDistance, backdrop);
 
             if (Log.DebugEnabled && (inside > 0f || wrapped > 0f) && now - lastBackdropLogAt >= 0.25)
             {
                 lastBackdropLogAt = now;
-                Log.Debug($"Backdrop: inside a cloud {inside:0.00}, opacity {backdrop:0.00} at {insideDistance:0} m; camera cloud {wrapped:0.00} at t{CameraJumpTime(now):+0.00;-0.00}");
+                Log.Debug($"Backdrop: inside a cloud {inside:0.00}{(insideCloud == gate && gate != null ? " (gate)" : "")}, opacity {backdrop:0.00} at {backdropDistance:0} m; camera cloud {wrapped:0.00} at t{CameraJumpTime(now):+0.00;-0.00}");
             }
 
-            wrapped *= Math.Min(1f, config.Darkness);
-            if (wrapped > 0.005f)
-                CameraCloud.Draw(camera, wrappingCloud, wrapped, config.Lightning ? wrappingCloud.LightningIntensity(now) : 0f, now);
+            fogWrapped *= Math.Min(1f, config.Darkness);
+            if (fogWrapped > 0.005f)
+                CameraCloud.Draw(camera, wrappingCloud, fogWrapped, config.Lightning ? wrappingCloud.LightningIntensity(now) : 0f, now);
             else
                 CameraCloud.Clear();
 
             // The grids that do not jump go out of the view of a camera on board as the world outside does: for a camera
-            // in its fog as what is outside the void, for any other as its ship disappears in its cloud for those outside
-            var ownCloud = wrapped > 0.005f ? wrappingCloud : CameraCloudOnBoard();
-            var outsideCover = wrapped > 0.005f ? 1f - CameraCloud.OutsideTransmission(wrapped) : ownCloud?.ShipCover(now) ?? 0f;
-            var outsideRange = wrapped > 0.005f ? CameraCloud.Current.Radius : (ownCloud?.PortalRadius ?? 0) * 1.4;
+            // in its fog or gate as what is outside it, for any other as its ship disappears in its cloud for those outside
+            var outside = wrapped > 0.005f;
+            var ownCloud = outside ? wrappingCloud : CameraCloudOnBoard();
+            var outsideCover = outside ? 1f - CameraCloud.OutsideTransmission(wrapped) : ownCloud?.ShipCover(now) ?? 0f;
+            var outsideRange = !outside ? (ownCloud?.PortalRadius ?? 0) * 1.4
+                : gate != null ? Math.Max(gate.PortalRadius, wrappingCloud.PortalRadius * 1.4)
+                : CameraCloud.Current.Radius;
             OutsideGrids.Update(ownCloud, outsideCover, camera, outsideRange, now);
 
             // The flames and glares no smoke hides fade with the ship's cloud, and for a camera inside the smoke those
-            // beyond its backdrop with the backdrop. For a wrapped camera they fade into its fog like everything in it,
-            // its own ship's included
-            if (wrapped > 0.005f)
+            // beyond its backdrop with the backdrop. For a camera block in the fog they fade into it like everything in
+            // it, its own ship's included; the ship of a camera in its gate keeps its own
+            if (fogWrapped > 0.005f)
                 Cover.Update(Clouds, now, camera, wrappingCloud, CameraCloud.Current, 0.0, 1f);
             else
-                Cover.Update(Clouds, now, camera, null, default, backdropDistance, 1f - backdrop);
+                Cover.Update(Clouds, now, camera, gate != null ? wrappingCloud : null, default, backdropDistance, 1f - backdrop);
+
+            // In the void no sun shines on the ship: its discharges light it (see SunPatches). Around an outside view (the
+            // third person camera's gate, a camera block's fog) the sun's light goes through the smoke as the view of the
+            // world outside does, so it is gone on the hull once the world is
+            var voidSmoke = gate != null ? 1f - CameraCloud.OutsideTransmission(gate.Formation(now))
+                : fogWrapped > 0.005f ? 1f - CameraCloud.OutsideTransmission(wrapped)
+                : ownCloud?.Formation(now) ?? 0f;
+            VoidDarkness = Math.Min(1f, config.Darkness) * voidSmoke;
+            if (VoidDarkness > 0.005f && config.Lightning)
+            {
+                if (fogWrapped > 0.005f)
+                    CameraCloud.AddLightSources(now);
+                else
+                    (gate ?? ownCloud)?.AddLightSources(now);
+            }
+
+            FlashLights.Update(now);
 
             // The estimate counts puffs as discs of their own opacity; in optical depth (-ln of the transmittance) the
             // light fog of the first seconds is below 1, the formed cloud 15-20, where its middle hides the sky. The sun
@@ -625,12 +670,15 @@ public static class JumpEffects
             var depth = -(float)Math.Log(Math.Max(target, 1e-30f));
             var x2 = (float)Math.Exp(-depth / SunDepthScale) * (1f - TransitHidesSun(CameraJumpTime(now)));
 
-            // A camera wrapped in its own cloud is in the void: the sun is outside it, behind its fog
-            target = x2 * CameraCloud.OutsideTransmission(wrapped) * (1f - backdrop);
+            // A camera block wrapped in its own cloud is in the void: the sun is outside it, behind its fog
+            target = x2 * CameraCloud.OutsideTransmission(fogWrapped) * (1f - backdrop);
         }
         else
         {
+            gate = null;
+            VoidDarkness = 0f;
             CameraCloud.Clear();
+            FlashLights.Clear();
             OutsideGrids.Clear();
             Cover.Clear();
         }
@@ -662,6 +710,15 @@ public static class JumpEffects
         var x = MathHelper.Clamp((float)(since < 0 ? (since + 5.5) / 2.0 : 1.0 - (since - 2.0) / 1.5), 0f, 1f);
         return x * x * (3f - 2f * x);
     }
+
+    /// <summary>
+    /// 0..1, how far the camera is in the void with its jumping ship, where no sun or sky lights the ship: as the smoke
+    /// forms around it (its cloud, a third person camera's gate), until it clears at the exit
+    /// </summary>
+    public static float VoidDarkness { get; private set; }
+
+    // The smoke gate of the third person camera of a jumping ship, null for none
+    private static Cloud gate;
 
     /// <summary>How much of the sun disc and its glare can be seen through the clouds from the camera, 1 when there is no cloud in the way</summary>
     public static float SunVisibility { get; private set; } = 1f;
@@ -701,7 +758,10 @@ public static class JumpEffects
         lastUpdateAt = double.NaN;
         Origins.Clear();
         Arrivals.Clear();
+        gate = null;
+        VoidDarkness = 0f;
         CameraCloud.Clear();
+        FlashLights.Clear();
         OutsideGrids.Clear();
         Cover.Clear();
         SunVisibility = 1f;

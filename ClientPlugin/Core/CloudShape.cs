@@ -36,6 +36,9 @@ public struct Puff
 
     /// <summary>Sampled on the air right at the hull: the layer that hides the ship</summary>
     public bool Hull;
+
+    /// <summary>A camera gate's thin smoke between the camera and the gate's shell (see Cloud.CreateCameraGate)</summary>
+    public bool Haze;
 }
 
 public sealed class CloudSettings

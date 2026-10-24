@@ -20,9 +20,38 @@ public sealed partial class Cloud
                 return SmoothStep((float)((now - (JumpAt - 7.0)) / 6.0));
             case CloudKind.Destination:
                 return 1f - SmoothStep((float)(now - StartedAt - 0.5) / 4.5f);
+            case CloudKind.Camera:
+                return gateOf.LightningIntensity(now) * gateFormation;
             default:
                 return 0.6f * (1f - SmoothStep((float)(now - StartedAt) / 3f));
         }
+    }
+
+    /// <summary>This cloud's discharges now, for the light they cast on the ship (see <see cref="FlashLights"/>)</summary>
+    public void AddLightSources(double now)
+    {
+        foreach (var patch in flashes)
+            AddLightSource(Vector3D.Transform(patch.Local, frame), patch.Radius, patch.Brightness(now));
+        foreach (var bolt in bolts)
+            AddLightSource(bolt.Middle, (float)bolt.Reach, bolt.Brightness);
+    }
+
+    private void AddLightSource(Vector3D position, float radius, float brightness)
+    {
+        // The gate's discharges are far out in its shell, beyond the ship: their light comes in from where they are,
+        // cast at the ship's edge
+        if (Kind == CloudKind.Camera && gateOf.Grid != null && !gateOf.Grid.MarkedForClose)
+        {
+            var ship = gateOf.Grid.PositionComp.WorldVolume;
+            var toPatch = position - ship.Center;
+            var distance = toPatch.Length();
+            var edge = ship.Radius + GateLightClearance;
+            if (distance > edge)
+                position = ship.Center + toPatch * (edge / distance);
+            radius = (float)Math.Max(radius, ship.Radius);
+        }
+
+        FlashLights.Sources.Add((position, radius, brightness));
     }
 
     private float Glow(Vector3D world, double now)
@@ -147,7 +176,8 @@ public sealed partial class Cloud
             else
                 slot = JumpSound.Snap;
 
-            if (AbortSound(now, ref loudness))
+            // A camera's gate is silent: its ship's cloud is heard
+            if (Kind != CloudKind.Camera && AbortSound(now, ref loudness))
                 JumpSounds.PlayDischarge(bolt.Middle, slot, loudness * medium, clarity);
         }
     }
@@ -165,7 +195,7 @@ public sealed partial class Cloud
             return;
 
         var size = (float)Shape.BubbleSemiAxes.AbsMax();
-        var rate = (3.0 + Shape.Puffs.Count / 1000.0) * Math.Max(1f, intensity);
+        var rate = (3.0 + Shape.Puffs.Count / 1000.0) * Math.Max(1f, intensity) * (Kind == CloudKind.Camera ? GateFlashes : 1.0);
         var spawned = 0;
         while (now >= nextFlashAt && spawned < 2)
         {
@@ -175,9 +205,16 @@ public sealed partial class Cloud
             if (random.NextDouble() > intensity)
                 continue;
 
+            // The gate's discharges are where the camera sees them: a few draws for a puff in its view
             var puff = Shape.Puffs[random.Next(Shape.Puffs.Count)];
             Evaluate(ref puff, now, out var alpha, out _, out var local);
-            if (alpha < 0.05f)
+            for (var draw = 0; Kind == CloudKind.Camera && !InGateView(local) && draw < 12; draw++)
+            {
+                puff = Shape.Puffs[random.Next(Shape.Puffs.Count)];
+                Evaluate(ref puff, now, out alpha, out _, out local);
+            }
+
+            if (alpha < 0.05f || Kind == CloudKind.Camera && !InGateView(local))
                 continue;
 
             var patch = new FlashPatch
@@ -196,7 +233,7 @@ public sealed partial class Cloud
             var distance = Vector3D.Distance(world, cameraPosition);
             var clarity = patch.Peak * (float)Math.Exp(-FogAttenuation * FogDepth(world, cameraPosition));
             var flashLoudness = clarity * Near(distance);
-            if (AbortSound(now, ref flashLoudness))
+            if (Kind != CloudKind.Camera && AbortSound(now, ref flashLoudness))
                 JumpSounds.PlayDischarge(world, JumpSound.Flash, flashLoudness * medium, clarity);
         }
     }

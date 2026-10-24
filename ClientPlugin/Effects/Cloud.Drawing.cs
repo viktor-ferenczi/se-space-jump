@@ -9,7 +9,12 @@ public sealed partial class Cloud
 {
     /// <summary>Draws the cloud and multiplies the transmittance of the view from the camera towards the sun through it</summary>
     /// <param name="visibility">0..1, how much of it shows: less for a camera wrapped in its own <see cref="CameraCloud"/></param>
-    public void Draw(double now, Vector3D cameraPosition, Vector3D sunDirection, float darkness, bool lightning, double maxDistance, float visibility, ref float sunTransmittance)
+    /// <param name="aboard">
+    /// Seen by the third person camera of its own ship, in the ship's smoke gate: without the layers that hide the ship
+    /// from those outside (the shroud at the hull and in front of it), its puffs thinner, so the ship shows through them
+    /// a little fogged
+    /// </param>
+    public void Draw(double now, Vector3D cameraPosition, Vector3D sunDirection, float darkness, bool lightning, double maxDistance, float visibility, ref float sunTransmittance, bool aboard = false)
     {
         if (Shape == null || !Started || Finished)
             return;
@@ -54,12 +59,16 @@ public sealed partial class Cloud
 
         var time = now - CreatedAt;
         var transmittance = 1.0;
-        sunlight = SmokeLight.Sunlight(center);
+        // The gate is in the void: no sun there
+        sunlight = Kind == CloudKind.Camera ? 0f : SmokeLight.Sunlight(center);
         var portalRadius = Math.Max(PortalRadius, 1.0);
-        var shroud = Shroud(now);
+        var shroud = aboard ? 0f : Shroud(now);
         PrepareBehindShip(cameraPosition, shroud);
         var hullLight = 1f - FrontLight(cameraPosition, shroud);
         var puffs = Shape.Puffs;
+        var drawn = 0;
+        var alphaSum = 0f;
+        var glowSum = 0f;
         for (var i = 0; i < puffs.Count; i += stride)
         {
             var puff = puffs[i];
@@ -101,11 +110,15 @@ public sealed partial class Cloud
             var glow = (puff.Hull ? hullLight : 1f) * Glow(world, now) * FlashGlow * (1f - BehindShip(world)) * NearCamera(world, cameraPosition);
             var color = SmokeLight.Color(sunlight, (world - center) / portalRadius, Vector3D.Normalize(toPuff)) + (glow + abortFlash) * flashTint;
             var angle = puff.Angle + puff.Spin * (float)time;
-            alpha *= visibility;
+            // Aboard, a puff thickened past opaque is as thin as an opaque one
+            alpha = aboard ? Math.Min(alpha, 1f) * AboardOpacity * visibility : alpha * visibility;
             if (alpha < 0.003f)
                 continue;
 
             MyTransparentGeometry.AddPointBillboard(Materials[puff.Material], new Vector4(color * alpha, Math.Min(alpha, 1f)), world, radius, angle);
+            drawn++;
+            alphaSum += alpha;
+            glowSum += glow;
 
             if (puff.Hull && shroud > 0.01f)
             {
@@ -116,11 +129,19 @@ public sealed partial class Cloud
         }
 
         sunTransmittance *= (float)transmittance;
+        if (Kind == CloudKind.Camera && Log.DebugEnabled && now - lastGateLogAt >= 0.5)
+        {
+            lastGateLogAt = now;
+            Log.Debug($"Gate: {drawn} puffs drawn, mean alpha {(drawn == 0 ? 0 : alphaSum / drawn):0.000}, mean glow {(drawn == 0 ? 0 : glowSum / drawn):0.000}, inner {gateInner:0} m, outer {gateOuter:0} m, formed {gateFormation:0.00}, lightning {LightningIntensity(now):0.00}, {flashes.Count} flashes, {bolts.Count} bolts");
+        }
         if (visibility < 0.003f)
             return;
 
         if (shroud > 0.01f)
             DrawFrontShroud(now, cameraPosition, shroud * visibility, flashTint);
+
+        if (Kind == CloudKind.Camera)
+            DrawGateGlows(now, flashTint);
 
         foreach (var bolt in bolts)
         {
@@ -247,7 +268,8 @@ public sealed partial class Cloud
     /// </summary>
     private float NearCamera(Vector3D world, Vector3D cameraPosition)
     {
-        var reach = 0.3 * Shape.BubbleSemiAxes.X;
+        // The gate is around the camera: only its first few metres stay dark
+        var reach = Kind == CloudKind.Camera ? GateDark : 0.3 * Shape.BubbleSemiAxes.X;
         var distanceSquared = Vector3D.DistanceSquared(world, cameraPosition);
         if (distanceSquared >= reach * reach)
             return 1f;

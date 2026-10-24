@@ -81,7 +81,7 @@ public class Config : INotifyPropertyChanged
         set => SetField(ref flashColor, value);
     }
 
-    [Checkbox(description: "Wrap your third person camera in smoke while your ship jumps, so nothing outside the cloud shows")]
+    [Checkbox(description: "Give your third person camera a smoke gate (a camera block on the hull, fog) while your ship jumps, so nothing outside the smoke shows")]
     public bool CameraOverlay
     {
         get => cameraOverlay;

@@ -15,13 +15,17 @@ cloud nothing of the outside shows through it: no planets, asteroids, stars or o
 gathers and breaks up. Seen from outside, the cloud hides the ship completely before it jumps and as it arrives: its
 hull, its lights and the flames of its thrusters go dark in the smoke, so nothing changes when the ship is gone.
 
-In third person view, and through a camera block on the hull, the camera goes into the void with your ship while it
-jumps, from the start of the countdown. The whole world turns into fog with lightning flashing in it: what is outside
-the gate fades away until nothing of it shows, and comes back the same way once the ship is out at the other end. Your
-ship is in the fog with you, lit by the flashes: the parts near the camera show clearly, the farther ones dimmer, so
-zooming in brings it out of the fog bit by bit. Other ships that do not jump disappear in the smoke as the view closes,
-for anyone on board, and come back as it opens. Move the camera into a sealed room of the ship and you see the smoke
-through its windows, as from the cockpit.
+In third person view the camera gets a smoke gate of its own while your ship jumps: it gathers around the camera a
+moment after the ship's cloud and goes wherever the camera goes, so you look out into the smoke as from a window of
+the ship. Your ship stays in view through a thin haze, with thick smoke all around beyond it and lightning flashing in
+it; nothing outside the gate shows. The ship's own cloud shows too, thinner than from outside: you see it gather
+around the ship and, at the other end, clear away from it. Move the camera into a sealed room of the ship and the gate is gone: you see the
+ship's own cloud through the windows, as from the cockpit. Through a camera block on the hull the whole world turns
+into fog instead, which fades away once the ship is out at the other end.
+
+Inside the smoke the sun and the sky no longer light the ship: the purple flashes and the lightning do, and its own
+lights. In third person the sunlight on the hull fades as the world outside does. Other ships that do not jump disappear in the smoke as the view closes, for anyone on board, and come back as
+it opens.
 
 The smoke is lit by the sun: in sunlight the outer edge of the cloud turns a dark grey, brighter on its sunny side and
 brightest when you look at it towards the sun, while its inside stays black. The cloud stands out as well against black
@@ -34,7 +38,7 @@ other players have the plugin.
 
 Open the plugin's settings from the Pulsar plugin list. You can change the colours of the lightning and flashes, the
 size and density of the clouds, how far away clouds are drawn, how quiet the music gets during a jump, and whether
-your third person camera is wrapped in smoke. If the effect is slow on your GPU, lower the smoke billboard count.
+your third person camera gets its smoke gate (and a camera block its fog). If the effect is slow on your GPU, lower the smoke billboard count.
 
 ## Sounds
 
