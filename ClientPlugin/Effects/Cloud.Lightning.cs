@@ -30,10 +30,9 @@ public sealed partial class Cloud
     /// <summary>This cloud's discharges now, for the light they cast on the ship (see <see cref="FlashLights"/>)</summary>
     public void AddLightSources(double now)
     {
+        // A bolt's light is a flash of its own (UpdateBolts)
         foreach (var patch in flashes)
             AddLightSource(Vector3D.Transform(patch.Local, frame), patch.Radius, patch.Brightness(now));
-        foreach (var bolt in bolts)
-            AddLightSource(bolt.Middle, (float)bolt.Reach, bolt.Brightness);
     }
 
     private void AddLightSource(Vector3D position, float radius, float brightness)
@@ -64,17 +63,6 @@ public sealed partial class Cloud
             {
                 var x = (float)(1.0 - d / patch.Radius);
                 glow += patch.Brightness(now) * x * x;
-            }
-        }
-
-        foreach (var bolt in bolts)
-        {
-            var d = Vector3D.Distance(world, bolt.Middle);
-            if (d < bolt.Reach)
-            {
-                // Soft wide falloff, so a flash lights a region of the cloud rather than single puffs
-                var x = (float)(1.0 - d / bolt.Reach);
-                glow += bolt.Brightness * x * x;
             }
         }
 
@@ -158,6 +146,19 @@ public sealed partial class Cloud
             var bolt = new Bolt(points, thickness, intensity * (0.5f + 0.5f * (float)random.NextDouble()), now + 0.05 + random.NextDouble() * 0.12, length * 2.5 + 10);
             bolts.Add(bolt);
 
+            // The light it casts on the smoke and the ship swells and fades as a flash where it strikes, the bolt itself
+            // a crack in it: lit only while the bolt shows, the light went on and off within a frame or two. The flash
+            // lasts about ten times as long, so it peaks lower: about as much light in all as the bolt's
+            flashes.Add(new FlashPatch
+            {
+                Local = Vector3D.Transform(bolt.Middle, MatrixD.Invert(frame)),
+                Radius = (float)bolt.Reach,
+                Peak = bolt.Brightness * FlashPatch.BoltShare * FlashPatch.PeakShare(random),
+                Phase = (float)(random.NextDouble() * Math.PI * 2),
+                StartsAt = now,
+                EndsAt = now + FlashPatch.Duration(random),
+            });
+
             // Every bolt is heard where it strikes: a bigger and closer one louder, one deep in the fog (seen only as
             // the glow it lights) as a dull flash
             var depth = FogDepth(bolt.Middle, cameraPosition);
@@ -221,10 +222,10 @@ public sealed partial class Cloud
             {
                 Local = local,
                 Radius = size * (0.2f + 0.2f * (float)random.NextDouble()),
-                Peak = intensity * (0.5f + 0.5f * (float)random.NextDouble()),
+                Peak = intensity * FlashPatch.PeakShare(random),
                 Phase = (float)(random.NextDouble() * Math.PI * 2),
                 StartsAt = now,
-                EndsAt = now + 0.4 + 0.8 * random.NextDouble(),
+                EndsAt = now + FlashPatch.Duration(random),
             };
             flashes.Add(patch);
 

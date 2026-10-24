@@ -193,16 +193,27 @@ public static class JumpEffects
         return leftBehind;
     }
 
-    // For the log: seconds since the jump of the ship the local player is left behind by (negative in the countdown)
+    // Seconds since the jump of the ship counting down nearest to the local player (negative in the countdown): the one
+    // the warning counts down to
     private static double? LeftBehindJumpTime(double now)
     {
+        var position = MySession.Static?.LocalCharacter?.PositionComp.GetPosition() ?? CameraPosition;
+        double? time = null;
+        var nearest = double.MaxValue;
         foreach (var cloud in Origins.Values)
         {
-            if (!cloud.Aborted && !cloud.Detached && !cloud.Finished)
-                return now - cloud.JumpAt;
+            if (cloud.Aborted || cloud.Detached || cloud.Finished)
+                continue;
+
+            var distance = Vector3D.DistanceSquared(position, cloud.Center);
+            if (distance < nearest)
+            {
+                nearest = distance;
+                time = now - cloud.JumpAt;
+            }
         }
 
-        return null;
+        return time;
     }
 
     // The countdowns the local character sat in a seat of the jumping group in
@@ -214,23 +225,25 @@ public static class JumpEffects
         if (CameraGridId() is not long id)
             return null;
 
+        // A new jump started while the last one's exit cloud is still about wins: the newest cloud of the grid
+        double? time = null;
+        var newest = double.MinValue;
         foreach (var cloud in Clouds)
         {
-            if (cloud.Finished || !cloud.GroupIds.Contains(id))
+            if (cloud.Finished || !cloud.GroupIds.Contains(id) || cloud.CreatedAt < newest)
                 continue;
 
-            double t;
             if (cloud.Kind == CloudKind.Origin && !cloud.Aborted && !cloud.Detached)
-                t = now - cloud.JumpAt;
+                time = now - cloud.JumpAt;
             else if (cloud.Kind == CloudKind.Destination)
-                t = now - cloud.CreatedAt;
+                time = now - cloud.CreatedAt;
             else
                 continue;
 
-            return t;
+            newest = cloud.CreatedAt;
         }
 
-        return null;
+        return time;
     }
 
     /// <summary>A grid this client does not have jumped: if it arrives near us, it is streamed in shortly</summary>
@@ -341,7 +354,8 @@ public static class JumpEffects
         JumpSounds.Update();
         var jumpTime = CameraJumpTime(now);
         NotificationPatches.ShowJumpMessage(JumpMessage(jumpTime), jumpTime);
-        NotificationPatches.ShowJumpImminent(LeftBehind(), now, LeftBehindJumpTime(now));
+        var leftBehindAt = LeftBehindJumpTime(now);
+        NotificationPatches.ShowJumpImminent(LeftBehind() && leftBehindAt is double t ? $"Jump Imminent ({Math.Max(0, (int)Math.Ceiling(-t - 1e-6))}s)" : null, now, leftBehindAt);
         var markersOut = CameraMarkersHidden(now) >= 0.5f;
         if (markersOut != cameraMarkersOut)
         {
@@ -575,7 +589,13 @@ public static class JumpEffects
         var now = Now;
         var target = 1f;
         var transmittance = 1f;
-        if (session != null && Clouds.Count != 0 && MySector.MainCamera != null)
+        var drawn = session != null && Clouds.Count != 0 && MySector.MainCamera != null;
+        // Whether the camera is on board a ship in its cloud, and what lights the ship there
+        var onBoard = false;
+        var lightsFromFog = false;
+        Cloud lightsFrom = null;
+        var voidDarknessScale = 0f;
+        if (drawn)
         {
             var config = Config.Current;
             var camera = CameraPosition;
@@ -699,22 +719,12 @@ public static class JumpEffects
             else
                 Cover.Update(Clouds, now, camera, gate != null ? wrappingCloud : null, default, backdropDistance, 1f - backdrop);
 
-            // In the void no sun shines on the ship: its discharges light it (see SunPatches). Around an outside view (the
-            // third person camera's gate, a camera block's fog) the sun's light goes through the smoke as the view of the
-            // world outside does, so it is gone on the hull once the world is
-            var voidSmoke = gate != null ? 1f - CameraCloud.OutsideTransmission(gate.Formation(now))
-                : fogWrapped > 0.005f ? 1f - CameraCloud.OutsideTransmission(wrapped)
-                : ownCloud?.Formation(now) ?? 0f;
-            VoidDarkness = Math.Min(1f, config.Darkness) * voidSmoke;
-            if (VoidDarkness > 0.005f && config.Lightning)
-            {
-                if (fogWrapped > 0.005f)
-                    CameraCloud.AddLightSources(now);
-                else
-                    (gate ?? ownCloud)?.AddLightSources(now);
-            }
-
-            FlashLights.Update(now);
+            // In the void no sun shines on the ship: its discharges light it (see SunPatches), as far as the sun is hidden
+            // from a camera on board, after the sun's visibility below
+            onBoard = ownCloud != null || gate != null || fogWrapped > 0.005f;
+            lightsFromFog = fogWrapped > 0.005f;
+            lightsFrom = gate ?? ownCloud;
+            voidDarknessScale = Math.Min(1f, config.Darkness);
 
             // The estimate counts puffs as discs of their own opacity; in optical depth (-ln of the transmittance) the
             // light fog of the first seconds is below 1, the formed cloud 15-20, where its middle hides the sky. The sun
@@ -732,7 +742,6 @@ public static class JumpEffects
         else
         {
             gate = null;
-            VoidDarkness = 0f;
             CameraCloud.Clear();
             FlashLights.Clear();
             OutsideGrids.Clear();
@@ -745,6 +754,20 @@ public static class JumpEffects
         SunVisibility += (target - SunVisibility) * Math.Min(1f, dt / (target < SunVisibility ? 0.08f : 0.6f));
         if (target >= 0.999f && SunVisibility > 0.995f)
             SunVisibility = 1f;
+
+        // The sun lights a camera's ship as much as the camera sees of it: its light and its disc go out in the smoke
+        // together and come back together, in every view on board (third person, a cockpit, a camera block)
+        VoidDarkness = onBoard ? voidDarknessScale * (1f - SunVisibility) : 0f;
+        if (onBoard && VoidDarkness > 0.005f && Config.Current.Lightning)
+        {
+            if (lightsFromFog)
+                CameraCloud.AddLightSources(now);
+            else
+                lightsFrom?.AddLightSources(now);
+        }
+
+        if (drawn)
+            FlashLights.Update(now);
 
         if (transmittance < 1f && now - lastSunLogAt >= 0.25)
         {
@@ -768,13 +791,14 @@ public static class JumpEffects
     }
 
     /// <summary>
-    /// 0..1, how far the camera is in the void with its jumping ship, where no sun or sky lights the ship: as the smoke
-    /// forms around it (its cloud, a third person camera's gate), until it clears at the exit
+    /// 0..1, how far the camera is in the void with its jumping ship, where no sun or sky lights the ship: as much as the
+    /// smoke hides the sun from a camera on board (1 - <see cref="SunVisibility"/>), until it clears at the exit
     /// </summary>
     public static float VoidDarkness { get; private set; }
 
     // The smoke gate of the third person camera of a jumping ship, null for none
     private static Cloud gate;
+
 
     /// <summary>How much of the sun disc and its glare can be seen through the clouds from the camera, 1 when there is no cloud in the way</summary>
     public static float SunVisibility { get; private set; } = 1f;
