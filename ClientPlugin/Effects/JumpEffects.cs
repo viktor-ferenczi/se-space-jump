@@ -756,8 +756,9 @@ public static class JumpEffects
             SunVisibility = 1f;
 
         // The sun lights a camera's ship as much as the camera sees of it: its light and its disc go out in the smoke
-        // together and come back together, in every view on board (third person, a cockpit, a camera block)
-        VoidDarkness = onBoard ? voidDarknessScale * (1f - SunVisibility) : 0f;
+        // together and come back together, on the disc's own curve, in every view on board (third person, a cockpit, a
+        // camera block). No sunlight is left on the ship once the disc is hidden
+        VoidDarkness = onBoard ? voidDarknessScale * (1f - Patches.SunPatches.Brightness(SunVisibility)) : 0f;
         if (onBoard && VoidDarkness > 0.005f && Config.Current.Lightning)
         {
             if (lightsFromFog)
@@ -792,7 +793,8 @@ public static class JumpEffects
 
     /// <summary>
     /// 0..1, how far the camera is in the void with its jumping ship, where no sun or sky lights the ship: as much as the
-    /// smoke hides the sun from a camera on board (1 - <see cref="SunVisibility"/>), until it clears at the exit
+    /// smoke hides the sun's disc from a camera on board (the disc's brightness of <see cref="SunVisibility"/>), until it
+    /// clears at the exit
     /// </summary>
     public static float VoidDarkness { get; private set; }
 

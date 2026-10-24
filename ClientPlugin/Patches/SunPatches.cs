@@ -51,17 +51,32 @@ public static class SunPatches
 
             var sun = 1f - dark;
             var sky = 1f - dark * (1f - VoidAmbient);
-            // The shaders light with the sun's colour (directionalLightColor), its factors scale only parts of it
+            // The shaders light with the sun's colour (directionalLightColor), its factors scale only parts of it; its
+            // shadows only gate that light. The sky lights the ship from the environment map: through the ambient
+            // factors, and in the reflections of glass and shields through the map's own skybox and atmosphere
             data.EnvironmentLight.SunColorRaw *= sun;
             data.EnvironmentLight.SunSpecularColorRaw *= sun;
             data.EnvironmentLight.AmbientDiffuseFactor *= sky;
             data.EnvironmentLight.AmbientSpecularFactor *= sky;
+            data.EnvironmentLight.EnvSkyboxBrightness *= sky;
+            data.EnvironmentLight.EnvAtmosphereBrightness *= sky;
+
+            // Once each time the ship is all in the void, in every build: the game's log shows that the sun went out
+            if (dark >= 0.995f && !voidLogged)
+            {
+                voidLogged = true;
+                Log.Info($"In the void: sunlight on the ship x{sun:0.00}, sky light x{sky:0.00}, eye adaptation at x{sun:0.00} of its speed");
+            }
         }
+
+        if (dark < 0.005f)
+            voidLogged = false;
     }
 
     private static double lastVoidLogAt;
+    private static bool voidLogged;
 
-    // The share of the sky's ambient light left in the void: none, the eye adaptation brings out what the discharges light
+    // The share of the sky's ambient light left in the void: none, the discharges light the ship there
     private const float VoidAmbient = 0f;
 
     [HarmonyPrefix]
@@ -90,8 +105,9 @@ public static class SunPatches
     }
 
     // The sun disc is so bright that a tenth of it still saturates the screen: it only looks dimmed when far less is left.
-    // It goes out smoothly below a fifth: cut off at once, everything it lights went dark in one frame
-    private static float Brightness(float visibility)
+    // It goes out smoothly below a fifth: cut off at once, everything it lights went dark in one frame. The sun's light
+    // on a ship in the void follows the same curve (JumpEffects.VoidDarkness): it is gone when the disc is
+    internal static float Brightness(float visibility)
     {
         var x = MathHelper.Clamp((visibility - 0.05f) / 0.15f, 0f, 1f);
         return visibility * visibility * visibility * x * x * (3f - 2f * x);
