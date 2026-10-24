@@ -98,10 +98,10 @@ public sealed partial class Cloud
     private const double AbortSoundKeep = 0.6;
     private const float AbortSoundGain = 0.5f;
 
-    // The gate inhales this long before the jump; its sound ends at the jump
+    // The gate's echoes start this long before the jump
     public const double PreJumpLead = 1.8;
 
-    // After the jump, the closing starts this late at the cloud left behind and at the exit: after the jump's burst
+    // After the jump, the closing starts this late at the cloud left behind and at the exit: after the jump's rumble set in
     private const double DepartureClosingDelay = 1.0;
     private const double ExitClosingDelay = 1.5;
 
@@ -603,7 +603,7 @@ public sealed partial class Cloud
     // over from the cloud while both are thin)
     private float FogAround(double now) => SmoothStep((float)((now - StartedAt) / Math.Max(1.0, JumpAt - 1.0 - StartedAt)));
 
-    private static float SmoothStep(float x)
+    internal static float SmoothStep(float x)
     {
         x = MathHelper.Clamp(x, 0f, 1f);
         return x * x * (3f - 2f * x);

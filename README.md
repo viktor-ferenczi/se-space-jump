@@ -35,9 +35,12 @@ your third person camera is wrapped in smoke. If the effect is slow on your GPU,
 
 ## Sounds
 
-The jump sounds are based on recordings of Elite Dangerous; `Assets/Sounds/SOURCES.md` lists where each one comes
-from. The lightning sounds are cut from Space Engineers' own thunder on your machine the first time they are needed, so
-they are not included here.
+The gate opens with a rising whine and roars while it is open. From right before the jump it echoes: a roar now and
+then from somewhere in the cloud, and inside the cloud a constant stream of wails, quieter than the lightning. The jump
+itself has no sound of its own: only a low rumble sets in as the ship leaves and as it arrives, and the echoes fade with
+the cloud. `Assets/Sounds/SOURCES.md` lists the sounds and when each one plays. The echoes and the lightning are cut on
+your machine the first time they are needed, from the plugin's roar and from Space Engineers' own thunder, so they are
+not included here.
 
 ## License
 

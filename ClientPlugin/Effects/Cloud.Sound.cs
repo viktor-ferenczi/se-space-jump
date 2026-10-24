@@ -120,15 +120,17 @@ public sealed partial class Cloud
         if (newGate && takenOverPhase != GatePhase.None)
             gate.Continue(takenOverPhase);
 
-        medium = Medium(cameraPosition);
+        var inside = Inside(cameraPosition);
+        medium = MySession.Static?.Settings?.RealisticSound == true ? inside : 1f;
         var gain = DistanceGain(cameraPosition, ref nearness) * medium;
         HeardLevel = level * gain;
-        gate.Update(now, phase, Center, level, nearness, gain);
+        // A stand-in cloud has no shape to be inside of: echoes, but no wails
+        var radius = Shape?.BubbleSemiAxes.AbsMax() ?? 0;
+        gate.Update(now, phase, Center, level, nearness, gain, radius, radius < 1 ? 0f : inside);
         if (now - lastHeardLogAt >= 0.5)
         {
             lastHeardLogAt = now;
-            var radius = Shape?.BubbleSemiAxes.AbsMax() ?? 0;
-            Log.Debug($"Gate heard: {Kind} at {Vector3D.Distance(cameraPosition, Center):0} m, radius {radius:0} m, gain {gain:0.000}, level {level:0.00}, phase {phase}");
+            Log.Debug($"Gate heard: {Kind} at {Vector3D.Distance(cameraPosition, Center):0} m, radius {radius:0} m, gain {gain:0.000}, level {level:0.00}, phase {phase}, inside {inside:0.00}");
         }
     }
 
@@ -137,20 +139,17 @@ public sealed partial class Cloud
     /// <summary>0..1, how loud the cloud's roar is at the camera this frame (for the music ducking)</summary>
     public float HeardLevel { get; private set; }
 
-    // 0..1, how much of the cloud's sound reaches the camera at all (realistic sound: see Medium)
+    // 0..1, how much of the cloud's sound reaches the camera at all. Realistic sound: no sound travels through vacuum,
+    // the fog is what carries the gate's sound, it is heard only inside the cloud (see Inside); the game still muffles
+    // it in a helmet or a sealed cockpit. Arcade sound: everywhere, quieter with the distance.
     private float medium = 1f;
 
     /// <summary>
-    /// Realistic sound: no sound travels through vacuum, the fog is what carries the gate's sound. It is heard inside the
-    /// cloud (fading out over the outer 15 % of its radius beyond the rim) and through the hull of a grid the fog
-    /// reaches: the jumping ship, a ship next to it. The game still muffles it in a helmet or a sealed cockpit. Arcade
-    /// sound: everywhere, quieter with the distance.
+    /// 0..1, how far the camera is inside the gate: inside the cloud (fading out over the outer 15 % of its radius beyond
+    /// the rim) or on a grid the fog reaches, the jumping ship, a ship next to it
     /// </summary>
-    private float Medium(Vector3D cameraPosition)
+    private float Inside(Vector3D cameraPosition)
     {
-        if (MySession.Static?.Settings?.RealisticSound != true)
-            return 1f;
-
         var radius = Shape?.BubbleSemiAxes.AbsMax() ?? 0;
         if (radius < 1)
             return 1f;

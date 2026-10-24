@@ -314,7 +314,7 @@ public static class JumpEffects
                 continue;
 
             cloud.StopSound();
-            Log.Debug($"{cloud.Kind} cloud of {cloud.Grid?.DisplayName ?? "(not replicated yet)"} finished, {cloud.ClampedByShip} puff draws cut down at the jumping grids' sealed air, {cloud.ClampedByObstacle} at other grids' sealed air; discharges heard so far: {JumpSounds.StrikesPlayed} strikes, {JumpSounds.SnapsPlayed} snaps, {JumpSounds.FlashesPlayed} flashes");
+            Log.Debug($"{cloud.Kind} cloud of {cloud.Grid?.DisplayName ?? "(not replicated yet)"} finished, {cloud.ClampedByShip} puff draws cut down at the jumping grids' sealed air, {cloud.ClampedByObstacle} at other grids' sealed air; discharges heard so far: {JumpSounds.StrikesPlayed} strikes, {JumpSounds.SnapsPlayed} snaps, {JumpSounds.FlashesPlayed} flashes; echoes: {JumpSounds.WailsPlayed} wails, {JumpSounds.EchoesPlayed} roars");
         }
 
         Clouds.RemoveAll(cloud => cloud.Finished);
