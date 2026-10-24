@@ -9,8 +9,8 @@ namespace ClientPlugin.Patches;
 
 /// <summary>
 /// The jump's HUD message names what the gate is doing instead of the vanilla "Ship will jump in N seconds":
-/// Manifesting Gate (Ns), In Transit (Ns), Jump Complete (see JumpEffects.JumpMessage). An aborted jump shows "JUMP ABORTED!"
-/// instead of the reason, and a player the jump would leave behind sees "JUMP IMMINENT!" in the same red.
+/// Manifesting Gate (Ns), In Transit (Ns), Jump Complete (see JumpEffects.JumpMessage). An aborted jump shows "Jump Aborted!"
+/// instead of the reason, and a player the jump would leave behind sees "Jump Imminent (Ns)" in the same red.
 /// </summary>
 [HarmonyPatch(typeof(MyHudNotifications), nameof(MyHudNotifications.Add), typeof(MyHudNotificationBase))]
 [SuppressMessage("ReSharper", "UnusedType.Global")]
@@ -70,11 +70,15 @@ public static class NotificationPatches
     private static MyHudNotification imminent;
 
     private static double imminentAddedAt;
+    private static string imminentText;
 
-    /// <summary>Shows "JUMP IMMINENT!" in the red of the abort while the local player is about to be left behind, see JumpEffects.LeftBehind</summary>
-    public static void ShowJumpImminent(bool show, double now, double? jumpTime)
+    /// <summary>
+    /// Shows "Jump Imminent (Ns)" in the red of the abort while the local player is about to be left behind, the
+    /// seconds to the jump; null removes it (see JumpEffects.LeftBehind)
+    /// </summary>
+    public static void ShowJumpImminent(string text, double now, double? jumpTime)
     {
-        if (show && imminent != null)
+        if (text != null && text == imminentText)
         {
             // Added again every second (adding one already shown only renews it): the HUD may have dropped it, as at
             // a change of the controlled entity
@@ -87,29 +91,35 @@ public static class NotificationPatches
             return;
         }
 
-        if (show == (imminent != null))
+        if (text == imminentText)
             return;
 
+        // A new text is a new message: one updated in place keeps showing its first text
         if (imminent != null)
-        {
             MyHud.Notifications.Remove(imminent);
-            imminent = null;
-            Log.Debug($"Jump message: JUMP IMMINENT! removed (t{jumpTime:+0.00;-0.00})");
+        imminent = null;
+        imminentText = text;
+        if (text == null)
+        {
+            Log.Debug($"Jump message: Jump Imminent removed (t{jumpTime:+0.00;-0.00})");
             return;
         }
 
         imminent = new MyHudNotification(MySpaceTexts.Format_OneParameter, 60000, "Red", level: MyNotificationLevel.Important);
-        imminent.SetTextFormatArguments("JUMP IMMINENT!");
+        imminent.SetTextFormatArguments(text);
         MyHud.Notifications.Add(imminent);
         imminentAddedAt = now;
-        Log.Debug($"Jump message: JUMP IMMINENT! (t{jumpTime:+0.00;-0.00})");
+        Log.Debug($"Jump message: {text} (t{jumpTime:+0.00;-0.00})");
     }
+
+    // In the game's own words (its NotificationJumpAborted reads "Jump was aborted!")
+    private const string AbortedText = "Jump Aborted!";
 
     public static void ShowJumpAborted()
     {
         var failure = new MyHudNotification(MySpaceTexts.Format_OneParameter, 2500, "Red", level: MyNotificationLevel.Important);
-        failure.SetTextFormatArguments("JUMP ABORTED!");
+        failure.SetTextFormatArguments(AbortedText);
         MyHud.Notifications.Add(failure);
-        Log.Debug("Jump message: JUMP ABORTED!");
+        Log.Debug($"Jump message: {AbortedText}");
     }
 }

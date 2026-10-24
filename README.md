@@ -10,8 +10,10 @@ The jump sounds are new as well, and the game's music goes quieter while a jump 
 says what the gate is doing in place of the usual countdown: Manifesting Gate, then In Transit from 4 seconds before
 the jump, as the location markers flicker out, until they flicker back in 5 seconds after it, then Jump Complete.
 Both show the seconds left until Jump Complete, as in Manifesting Gate (15s) at the start of the countdown. Anyone on
-or in the ship who will not jump with it (only those seated in it do) sees a red JUMP IMMINENT! during the countdown:
-leave your seat and it shows at once, sit down again and it goes.
+or in the ship who will not jump with it (only those seated in it do) sees a red Jump Imminent (Ns) during the
+countdown, with the seconds left until the jump: leave your seat and it shows at once, sit down again and it goes. An
+aborted jump shows Jump Aborted! in the same red. Start a new jump while the last one's smoke is still around the ship
+and the messages follow the new jump.
 
 The smoke stays out of pressurized rooms, so from inside the ship you only see it through the windows. Inside the
 cloud nothing of the outside shows through it: no planets, asteroids, stars or other ships, only at its edges while it
@@ -27,7 +29,8 @@ ship's own cloud through the windows, as from the cockpit. Through a camera bloc
 into fog instead, which fades away once the ship is out at the other end.
 
 Inside the smoke the sun and the sky no longer light the ship: the purple flashes and the lightning do, and its own
-lights. In third person the sunlight on the hull fades as the world outside does. Other ships that do not jump disappear in the smoke as the view closes, for anyone on board, and come back as
+lights. The sunlight on the ship fades out as the sun's disc disappears in the smoke and comes back with it, in every
+view on board. The flashes swell and fade over about a second each, some brighter, some longer than others. Other ships that do not jump disappear in the smoke as the view closes, for anyone on board, and come back as
 it opens.
 
 The smoke is lit by the sun: in sunlight the outer edge of the cloud turns a dark grey, brighter on its sunny side and

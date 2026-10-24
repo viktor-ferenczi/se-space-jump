@@ -346,10 +346,10 @@ public static class CameraCloud
             {
                 Local = fog.Camera + direction * distance - fog.Center,
                 Radius = (float)(FarFlashSize * distance) + 3f,
-                Peak = intensity * (0.5f + 0.5f * (float)Random.NextDouble()),
+                Peak = intensity * FlashPatch.PeakShare(Random),
                 Phase = (float)(Random.NextDouble() * Math.PI * 2),
                 StartsAt = now,
-                EndsAt = now + 0.3 + 0.7 * Random.NextDouble(),
+                EndsAt = now + FlashPatch.Duration(Random),
             });
         }
     }
@@ -424,10 +424,10 @@ public static class CameraCloud
             {
                 Local = RandomDirection(Random) * (float)(NearFrom + (NearTo - NearFrom) * Random.NextDouble()),
                 Radius = 4f + 3f * (float)Random.NextDouble(),
-                Peak = intensity * (0.5f + 0.5f * (float)Random.NextDouble()),
+                Peak = intensity * FlashPatch.PeakShare(Random),
                 Phase = (float)(Random.NextDouble() * Math.PI * 2),
                 StartsAt = now,
-                EndsAt = now + 0.4 + 0.8 * Random.NextDouble(),
+                EndsAt = now + FlashPatch.Duration(Random),
             });
         }
     }

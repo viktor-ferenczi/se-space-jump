@@ -14,6 +14,18 @@ internal sealed class FlashPatch
     public double StartsAt;
     public double EndsAt;
 
+    // A flash swells and fades over about a second (FadeFrom..FadeTo s, its peak in the middle), as bright as PeakFrom..1
+    // of its cloud's lightning: the deep discharges are a slow glow in the smoke, the strikes are the bolts
+    private const double FadeFrom = 0.8;
+    private const double FadeTo = 1.6;
+    private const float PeakFrom = 0.3f;
+
+    /// <summary>How long a new flash lasts (s), at random</summary>
+    public static double Duration(Random random) => FadeFrom + (FadeTo - FadeFrom) * random.NextDouble();
+
+    /// <summary>The share of its cloud's lightning a new flash peaks at, at random</summary>
+    public static float PeakShare(Random random) => PeakFrom + (1f - PeakFrom) * (float)(random.NextDouble() * random.NextDouble() + random.NextDouble()) / 2f;
+
     public float Brightness(double now)
     {
         var age = (float)(now - StartsAt);
@@ -21,8 +33,9 @@ internal sealed class FlashPatch
         if (age < 0 || left < 0)
             return 0f;
 
-        var envelope = Math.Min(1f, age / 0.08f) * Math.Min(1f, left / (float)(EndsAt - StartsAt) * 1.5f);
-        var flicker = 0.7f + 0.3f * (float)Math.Sin(age * 23f + Phase);
-        return Peak * envelope * flicker;
+        // Up and down as sin^2 of its life, no edge at either end; a slow, faint flicker on it
+        var envelope = (float)Math.Sin(Math.PI * age / (EndsAt - StartsAt));
+        var flicker = 0.9f + 0.1f * (float)Math.Sin(age * 9f + Phase);
+        return Peak * envelope * envelope * flicker;
     }
 }

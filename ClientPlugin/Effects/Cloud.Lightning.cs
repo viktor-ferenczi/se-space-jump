@@ -221,10 +221,10 @@ public sealed partial class Cloud
             {
                 Local = local,
                 Radius = size * (0.2f + 0.2f * (float)random.NextDouble()),
-                Peak = intensity * (0.5f + 0.5f * (float)random.NextDouble()),
+                Peak = intensity * FlashPatch.PeakShare(random),
                 Phase = (float)(random.NextDouble() * Math.PI * 2),
                 StartsAt = now,
-                EndsAt = now + 0.4 + 0.8 * random.NextDouble(),
+                EndsAt = now + FlashPatch.Duration(random),
             };
             flashes.Add(patch);
 
