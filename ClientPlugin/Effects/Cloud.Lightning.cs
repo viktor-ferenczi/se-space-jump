@@ -30,27 +30,10 @@ public sealed partial class Cloud
     /// <summary>This cloud's discharges now, for the light they cast on the ship (see <see cref="FlashLights"/>)</summary>
     public void AddLightSources(double now)
     {
-        // A bolt's light is a flash of its own (UpdateBolts)
+        // A bolt's light is a flash of its own (UpdateBolts). A discharge lights the hull from where it flashes, as far as
+        // it lights the smoke there (Glow): the ship and the smoke around it light up together
         foreach (var patch in flashes)
-            AddLightSource(Vector3D.Transform(patch.Local, frame), patch.Radius, patch.Brightness(now));
-    }
-
-    private void AddLightSource(Vector3D position, float radius, float brightness)
-    {
-        // The gate's discharges are far out in its shell, beyond the ship: their light comes in from where they are,
-        // cast at the ship's edge
-        if (Kind == CloudKind.Camera && gateOf.Grid != null && !gateOf.Grid.MarkedForClose)
-        {
-            var ship = gateOf.Grid.PositionComp.WorldVolume;
-            var toPatch = position - ship.Center;
-            var distance = toPatch.Length();
-            var edge = ship.Radius + GateLightClearance;
-            if (distance > edge)
-                position = ship.Center + toPatch * (edge / distance);
-            radius = (float)Math.Max(radius, ship.Radius);
-        }
-
-        FlashLights.Sources.Add((position, radius, brightness));
+            FlashLights.Sources.Add((Vector3D.Transform(patch.Local, frame), patch.Radius, patch.Brightness(now)));
     }
 
     private float Glow(Vector3D world, double now)

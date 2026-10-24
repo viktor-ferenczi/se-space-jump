@@ -93,7 +93,8 @@ public static class JumpEffects
         cloud = Cloud.CreateOrigin(grid, now, now + timeLeft);
         Origins[grid.EntityId] = cloud;
         Clouds.Add(cloud);
-        Log.Debug($"Countdown of {grid.DisplayName} ({grid.EntityId}): {timeLeft:0.0} s");
+        // In every build: a log shows whether a jump ran and in which view
+        Log.Info($"Countdown of {grid.DisplayName} ({grid.EntityId}): {timeLeft:0.0} s, camera: {CameraView()}, jumps with the camera: {CameraJumpsWith(grid)}");
     }
 
     public static void OnJumped(MyGridJumpDriveSystem system, MatrixD preJumpMatrix, Vector3 velocity)
@@ -589,12 +590,13 @@ public static class JumpEffects
         var now = Now;
         var target = 1f;
         var transmittance = 1f;
+        var fog = 0f;
         var drawn = session != null && Clouds.Count != 0 && MySector.MainCamera != null;
         // Whether the camera is on board a ship in its cloud, and what lights the ship there
         var onBoard = false;
         var lightsFromFog = false;
         Cloud lightsFrom = null;
-        var voidDarknessScale = 0f;
+        Cloud hullGlowOf = null;
         if (drawn)
         {
             var config = Config.Current;
@@ -719,45 +721,58 @@ public static class JumpEffects
             else
                 Cover.Update(Clouds, now, camera, gate != null ? wrappingCloud : null, default, backdropDistance, 1f - backdrop);
 
-            // In the void no sun shines on the ship: its discharges light it (see SunPatches), as far as the sun is hidden
-            // from a camera on board, after the sun's visibility below
-            onBoard = ownCloud != null || gate != null || fogWrapped > 0.005f;
+            // In the void no sun shines on the ship: its discharges light it (FlashLights, HullGlow) for a camera on board
+            // or in the smoke, as far as the background fog below hides the sun
+            onBoard = ownCloud != null || gate != null || fogWrapped > 0.005f || inside > 0.005f;
             lightsFromFog = fogWrapped > 0.005f;
-            lightsFrom = gate ?? ownCloud;
-            voidDarknessScale = Math.Min(1f, config.Darkness);
+            // In third person (the gate) the discharges cast no light of their own on the hull: the smoke's glow is drawn
+            // over the ship as beside it (Cloud.Draw, aboard), so the hull and the smoke light up together. As point lights
+            // they lit the hull's faces brighter than the smoke in front of them, with hard edges (measured, #1435). The
+            // hull is lit by the wide, slow glows of HullGlow instead
+            lightsFrom = gate == null ? ownCloud : null;
+            hullGlowOf = gate != null ? wrappingCloud : null;
 
-            // The estimate counts puffs as discs of their own opacity; in optical depth (-ln of the transmittance) the
-            // light fog of the first seconds is below 1, the formed cloud 15-20, where its middle hides the sky. The sun
-            // goes out behind it as the sky does, a few times later than the estimate says (it overlaps the puffs' soft
-            // discs): kept at 85 % up to a depth of 20, its glare shone over a cloud that hid everything else, which then
-            // looked thin in sunlight. Those in the jumping ship lose it to the transit itself: out from 5.5 s to 3.5 s
-            // before the jump (before the markers go), back from 2 s after it as the exit fog allows
+            // The background fog that hides the world outside from the camera hides the sun with it, on the same value
+            // (Viktor, #1435): for a camera that jumps with the ship, in every view, the fog of its third person gate
+            // over the jump (the backdrop drawn behind the gate); for any other camera in a cloud's smoke (on foot, the
+            // spectator), the backdrop drawn behind that smoke. The sun's light, the sky's and the disc go out as it
+            // closes and come back as it clears
+            fog = Math.Max(Backdrop.Opacity((1f - CameraCloud.OutsideTransmission(CameraShipGate(now))) * Math.Min(1f, config.Darkness)), backdrop);
+
+            // The disc of the sun behind a cloud seen from outside it: the estimate counts puffs as discs of their own
+            // opacity; in optical depth (-ln of the transmittance) the light fog of the first seconds is below 1, the
+            // formed cloud 15-20, where its middle hides the sky. The sun goes out behind it as the sky does, a few times
+            // later than the estimate says (it overlaps the puffs' soft discs): kept at 85 % up to a depth of 20, its
+            // glare shone over a cloud that hid everything else, which then looked thin in sunlight
             transmittance = target;
             var depth = -(float)Math.Log(Math.Max(target, 1e-30f));
-            var x2 = (float)Math.Exp(-depth / SunDepthScale) * (1f - TransitHidesSun(CameraJumpTime(now)));
-
-            // A camera block wrapped in its own cloud is in the void: the sun is outside it, behind its fog
-            target = x2 * CameraCloud.OutsideTransmission(fogWrapped) * (1f - backdrop);
+            target = (float)Math.Exp(-depth / SunDepthScale);
         }
         else
         {
             gate = null;
             CameraCloud.Clear();
             FlashLights.Clear();
+            HullGlow.Clear();
             OutsideGrids.Clear();
             Cover.Clear();
         }
 
-        // The sun disappears quickly into a cloud and comes back slowly, without flickering from one frame to the next
+        // The sun disappears quickly into a cloud in front of it and comes back slowly, without flickering from one frame
+        // to the next. The background fog needs no smoothing, it follows the jump's timeline
         var dt = (float)MathHelper.Clamp(now - lastDrawAt, 0, 0.1);
         lastDrawAt = now;
-        SunVisibility += (target - SunVisibility) * Math.Min(1f, dt / (target < SunVisibility ? 0.08f : 0.6f));
-        if (target >= 0.999f && SunVisibility > 0.995f)
-            SunVisibility = 1f;
+        sunThroughClouds += (target - sunThroughClouds) * Math.Min(1f, dt / (target < sunThroughClouds ? 0.08f : 0.6f));
+        if (target >= 0.999f && sunThroughClouds > 0.995f)
+            sunThroughClouds = 1f;
+        SunVisibility = Math.Min(sunThroughClouds, 1f - fog);
+        BackgroundFog = fog;
 
-        // The sun lights a camera's ship as much as the camera sees of it: its light and its disc go out in the smoke
-        // together and come back together, in every view on board (third person, a cockpit, a camera block)
-        VoidDarkness = onBoard ? voidDarknessScale * (1f - SunVisibility) : 0f;
+        // The sun lights the scene as much as the background fog lets the world through, in lockstep with it: the
+        // floor of a sunlit room goes dark as the world outside does. Darkness (the smoke's opacity) is in the fog
+        VoidDarkness = fog;
+        Patches.SunPatches.Update();
+        CheckVoid(now, onBoard);
         if (onBoard && VoidDarkness > 0.005f && Config.Current.Lightning)
         {
             if (lightsFromFog)
@@ -768,11 +783,12 @@ public static class JumpEffects
 
         if (drawn)
             FlashLights.Update(now);
+        HullGlow.Update(now, Config.Current.Lightning ? hullGlowOf : null, VoidDarkness);
 
-        if (transmittance < 1f && now - lastSunLogAt >= 0.25)
+        if ((transmittance < 1f || fog > 0f) && now - lastSunLogAt >= 0.25)
         {
             lastSunLogAt = now;
-            Log.Debug($"Sun: transmittance {transmittance:0.000}, depth {-Math.Log(Math.Max(transmittance, 1e-30f)):0.00}, visibility {SunVisibility:0.000} at t{CameraJumpTime(now):+0.00;-0.00}");
+            Log.Debug($"Sun: background fog {fog:0.000}, sun light x{1f - VoidDarkness:0.000}, transmittance {transmittance:0.000}, depth {-Math.Log(Math.Max(transmittance, 1e-30f)):0.00}, visibility {SunVisibility:0.000} at t{CameraJumpTime(now):+0.00;-0.00}");
         }
     }
 
@@ -781,18 +797,9 @@ public static class JumpEffects
     private static bool ReplacedForCamera(Cloud cloud, Cloud wrappingCloud, Vector3D camera) =>
         cloud == wrappingCloud || cloud.WrappedCamera && !cloud.Detached && OutsideViewJumpsWith(cloud) && CameraInOpenAir(cloud, camera);
 
-    private static float TransitHidesSun(double? t)
-    {
-        if (t is not double since)
-            return 0f;
-
-        var x = MathHelper.Clamp((float)(since < 0 ? (since + 5.5) / 2.0 : 1.0 - (since - 2.0) / 1.5), 0f, 1f);
-        return x * x * (3f - 2f * x);
-    }
-
     /// <summary>
-    /// 0..1, how far the camera is in the void with its jumping ship, where no sun or sky lights the ship: as much as the
-    /// smoke hides the sun from a camera on board (1 - <see cref="SunVisibility"/>), until it clears at the exit
+    /// 0..1, how far the sun and the sky stop lighting the scene: the <see cref="BackgroundFog"/> that hides the world
+    /// outside the smoke from the camera, in lockstep with it
     /// </summary>
     public static float VoidDarkness { get; private set; }
 
@@ -803,12 +810,66 @@ public static class JumpEffects
     /// <summary>How much of the sun disc and its glare can be seen through the clouds from the camera, 1 when there is no cloud in the way</summary>
     public static float SunVisibility { get; private set; } = 1f;
 
+    // The sun's visibility through the clouds in front of it alone
+    private static float sunThroughClouds = 1f;
+
+    /// <summary>0..1, the background fog that hides the world outside the smoke from the camera, and the sun with it</summary>
+    public static float BackgroundFog { get; private set; }
+
+    /// <summary>0..1, how far the smoke gate of a third person camera on the camera's ship has formed, in any view on the ship</summary>
+    private static float CameraShipGate(double now)
+    {
+        if (CameraGridId() is not long id)
+            return 0f;
+
+        var formed = 0f;
+        foreach (var cloud in Clouds)
+        {
+            if (cloud.Kind is CloudKind.Origin or CloudKind.Destination && cloud.GroupIds.Contains(id))
+                formed = Math.Max(formed, cloud.GateFormation(now));
+        }
+
+        return formed;
+    }
+
     // The sun behind a cloud keeps exp(-depth / SunDepthScale) of its light, for the estimated optical depth
     private const float SunDepthScale = 3f;
 
     private static double lastDrawAt;
     private static double lastUpdateAt = double.NaN;
     private static double lastSunLogAt;
+
+    // Once per jump of the camera's ship, in every build, in the middle of the transit: what the camera is on and how dark
+    // the void is, as the plugin sees it and as the render thread last applied it. A sun left on in the void shows here
+    // as an applied darkness below the plugin's
+    private static void CheckVoid(double now, bool onBoard)
+    {
+        if (CameraJumpTime(now) is not double since || since < VoidCheckAt || since >= VoidCheckAt + 1.0)
+            return;
+
+        var jumpAt = now - since;
+        if (Math.Abs(jumpAt - voidCheckedJumpAt) < 1.0)
+            return;
+
+        voidCheckedJumpAt = jumpAt;
+        Log.Info($"Void check at t{since:+0.00;-0.00}: camera: {CameraView()}, on board {onBoard}, sun visibility {SunVisibility:0.00}, " +
+                 $"background fog {BackgroundFog:0.00}, darkness {VoidDarkness:0.00}, applied by the render x{Patches.SunPatches.AppliedDarkness:0.00}, Darkness setting {Config.Current.Darkness:0.00}");
+    }
+
+    private const double VoidCheckAt = -1.0;
+    private static double voidCheckedJumpAt = double.MinValue;
+
+    private static string CameraView()
+    {
+        var session = MySession.Static;
+        var controller = session?.CameraController;
+        if (controller == null)
+            return "none";
+
+        var entity = controller.Entity as MyEntity;
+        var grid = entity?.GetTopMostParent() as MyCubeGrid;
+        return $"{session.GetCameraControllerEnum()} {entity?.GetType().Name ?? controller.GetType().Name}{(grid != null ? $" on {grid.DisplayName} ({grid.EntityId})" : "")}";
+    }
     private static double lastWrapLogAt;
     private static double lastBackdropLogAt;
     private static bool cameraMarkersOut;
@@ -843,6 +904,7 @@ public static class JumpEffects
         VoidDarkness = 0f;
         CameraCloud.Clear();
         FlashLights.Clear();
+        HullGlow.Clear();
         OutsideGrids.Clear();
         Cover.Clear();
         SunVisibility = 1f;

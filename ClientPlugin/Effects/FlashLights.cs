@@ -13,10 +13,9 @@ namespace ClientPlugin.Effects;
 /// </summary>
 public static class FlashLights
 {
-    // This many point lights at most, reaching this far beyond the region the discharge lights, at this intensity for
-    // a discharge at its peak
+    // This many point lights at most, each as far as its discharge lights the smoke, at this intensity for a discharge at
+    // its peak
     private const int Count = 6;
-    private const float Reach = 8f;
     private const float Intensity = 6f;
 
     // A light whose discharge is gone (a bolt ends at once) fades out over about this long (s) instead
@@ -85,7 +84,7 @@ public static class FlashLights
             var (position, radius, brightness) = brightest[i];
             light.Position = position;
             light.Color = color;
-            light.Range = radius + Reach;
+            light.Range = radius;
             light.Intensity = Intensity * brightness;
             light.LightOn = true;
             light.UpdateLight();

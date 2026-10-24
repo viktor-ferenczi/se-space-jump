@@ -5,6 +5,7 @@ using Sandbox.Game.Entities;
 using Sandbox.Game.World;
 using VRage.Game;
 using VRageMath;
+using VRageRender;
 
 namespace ClientPlugin.Effects;
 
@@ -31,14 +32,11 @@ public sealed partial class Cloud
     private const double GateDark = 9;
     private const double GateFlashes = 4;
 
-    // The discharges are seen in the camera's view (and a little around it), where the gate's smoke shows them: elsewhere
-    // they only light the ship, from this far beyond its bounding sphere (m)
+    // The discharges are seen in the camera's view (and a little around it), where the gate's smoke shows them
     private const double GateViewCone = 0.6;
-    private const double GateLightClearance = 6;
 
-    // How bright a discharge's glow in the gate is (HDR, times the flash colour)
-    private const float GateGlow = 6f;
-    private const float GateGlowOpacity = 0.4f;
+    // How bright a discharge's glow in the gate is (HDR, times the flash colour), added on top of the smoke
+    private const float GateGlow = 0.5f;
 
     // The backdrop closing the view behind the gate, this many times as far as its shell's outside
     private const double GateBackdrop = 3;
@@ -131,8 +129,9 @@ public sealed partial class Cloud
     /// <summary>
     /// The discharges' light in the gate's smoke: glows of the flash colour where they flash. The puffs they light alone
     /// hardly show it: beyond 50 m the renderer weighs every transparent billboard over a pixel the same, so the lit ones
-    /// are averaged with the unlit ones and the backdrop. A glow is a bright billboard of its own, with an opacity (the
-    /// renderer drops a billboard without one); the hull hides a glow beyond it
+    /// are averaged with the unlit ones and the backdrop. A glow is a bright billboard of its own, added on top: blended in,
+    /// one in the haze between the camera and the ship was averaged with the shell beside the ship but not over the hull
+    /// (the hull hides the shell), and lit the ship's silhouette with a hard edge (#1435)
     /// </summary>
     private void DrawGateGlows(double now, Vector3 tint)
     {
@@ -144,8 +143,8 @@ public sealed partial class Cloud
 
             var position = Vector3D.Transform(patch.Local, frame);
             for (var layer = 0; layer < 2; layer++)
-                MyTransparentGeometry.AddPointBillboard(Materials[(layer + 1) % Materials.Length], new Vector4(tint * (GateGlow * brightness), GateGlowOpacity * brightness), position,
-                    patch.Radius * (0.8f - 0.25f * layer), patch.Phase + 2.4f * layer);
+                MyTransparentGeometry.AddPointBillboard(Materials[(layer + 1) % Materials.Length], new Vector4(tint * (GateGlow * brightness), 0f), position,
+                    patch.Radius * (0.8f - 0.25f * layer), patch.Phase + 2.4f * layer, blendType: MyBillboard.BlendTypeEnum.AdditiveTop);
         }
     }
 

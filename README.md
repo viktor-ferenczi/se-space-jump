@@ -30,7 +30,9 @@ into fog instead, which fades away once the ship is out at the other end.
 
 Inside the smoke the sun and the sky no longer light the ship: the purple flashes and the lightning do, and its own
 lights. The sunlight on the ship fades out as the sun's disc disappears in the smoke and comes back with it, in every
-view on board. The flashes swell and fade over about a second each, some brighter, some longer than others. Other ships that do not jump disappear in the smoke as the view closes, for anyone on board, and come back as
+view on board, its shadows and reflections of the sky with it. Your eyes do not adjust to the dark while you are in the
+smoke: the ship looks as dark as it is without the sun. The flashes swell and fade over about a second each, some
+brighter, some longer than others, and light the ship together with the smoke around it. Other ships that do not jump disappear in the smoke as the view closes, for anyone on board, and come back as
 it opens.
 
 The smoke is lit by the sun: in sunlight the outer edge of the cloud turns a dark grey, brighter on its sunny side and

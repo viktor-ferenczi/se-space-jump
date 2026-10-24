@@ -70,6 +70,10 @@ public sealed partial class Cloud
     // The share of its puffs' opacity the ship's cloud keeps for the third person camera of its own ship (Draw, aboard)
     private const float AboardOpacity = 0.5f;
 
+    // The glow of a cloud drawn aboard and of the gate, added on top of the smoke, sums the puffs over a pixel where the smoke's own blend
+    // averaged them: at this share the cloud is as bright as with its glow blended in (measured, #1435)
+    private const float AboardGlowShare = 0.25f;
+
     // The sun's light at the cloud this frame (see SmokeLight)
     private float sunlight;
 
