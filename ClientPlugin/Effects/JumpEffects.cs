@@ -596,6 +596,7 @@ public static class JumpEffects
         var onBoard = false;
         var lightsFromFog = false;
         Cloud lightsFrom = null;
+        Cloud hullGlowOf = null;
         if (drawn)
         {
             var config = Config.Current;
@@ -720,14 +721,16 @@ public static class JumpEffects
             else
                 Cover.Update(Clouds, now, camera, gate != null ? wrappingCloud : null, default, backdropDistance, 1f - backdrop);
 
-            // In the void no sun shines on the ship: its discharges light it (FlashLights) for a camera on board
+            // In the void no sun shines on the ship: its discharges light it (FlashLights, HullGlow) for a camera on board
             // or in the smoke, as far as the background fog below hides the sun
             onBoard = ownCloud != null || gate != null || fogWrapped > 0.005f || inside > 0.005f;
             lightsFromFog = fogWrapped > 0.005f;
             // In third person (the gate) the discharges cast no light of their own on the hull: the smoke's glow is drawn
             // over the ship as beside it (Cloud.Draw, aboard), so the hull and the smoke light up together. As point lights
-            // they lit the hull's faces brighter than the smoke in front of them, with hard edges (measured, #1435).
+            // they lit the hull's faces brighter than the smoke in front of them, with hard edges (measured, #1435). The
+            // hull is lit by the wide, slow glows of HullGlow instead
             lightsFrom = gate == null ? ownCloud : null;
+            hullGlowOf = gate != null ? wrappingCloud : null;
 
             // The background fog that hides the world outside from the camera hides the sun with it, on the same value
             // (Viktor, #1435): for a camera that jumps with the ship, in every view, the fog of its third person gate
@@ -750,6 +753,7 @@ public static class JumpEffects
             gate = null;
             CameraCloud.Clear();
             FlashLights.Clear();
+            HullGlow.Clear();
             OutsideGrids.Clear();
             Cover.Clear();
         }
@@ -779,6 +783,7 @@ public static class JumpEffects
 
         if (drawn)
             FlashLights.Update(now);
+        HullGlow.Update(now, Config.Current.Lightning ? hullGlowOf : null, VoidDarkness);
 
         if ((transmittance < 1f || fog > 0f) && now - lastSunLogAt >= 0.25)
         {
@@ -899,6 +904,7 @@ public static class JumpEffects
         VoidDarkness = 0f;
         CameraCloud.Clear();
         FlashLights.Clear();
+        HullGlow.Clear();
         OutsideGrids.Clear();
         Cover.Clear();
         SunVisibility = 1f;
