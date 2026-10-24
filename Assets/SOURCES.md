@@ -17,3 +17,10 @@ played a few semitones higher or lower at random.
 The lightning is not in this folder either. The plugin cuts it from Space Engineers' own weather lightning
 (`Content/Audio/ARC/EVENT/Lightning_0.wav` and `Lightning_2.wav`) on the player's machine and keeps the cuts in
 `Storage/BlackSmoke/Lightning/se` in the game's user data folder.
+
+# The textures
+
+`SoftDisc.dds`: the round billboard behind the smoke's cover (`ClientPlugin/Effects/SoftDisc.cs`), 128x128 uncompressed
+32 bit BGRA, white, opaque out to 0.85 of its radius and a smoothstep down to nothing at its rim. Made by the plugin
+itself (it wrote it into the temp folder at first use until #1435); shipped here so it writes nothing outside the game's
+user data folder.
