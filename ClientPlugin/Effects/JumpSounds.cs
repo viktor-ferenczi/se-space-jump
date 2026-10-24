@@ -50,14 +50,14 @@ public enum JumpSound
 
 /// <summary>
 /// Sound slots of the gate. The jump is heard from the gate, the cloud, by the pilots and the observers alike: the jump
-/// drives themselves are silent. Each stage has its one sound, the plugin's file in Assets/Sounds; the wails and echoes
+/// drives themselves are silent. Each stage has its one sound, the plugin's file in Assets; the wails and echoes
 /// are cut from the plugin's roar (<see cref="EchoCuts"/>), the discharges from the game's own lightning
 /// (<see cref="LightningCuts"/>). <see cref="GateSound"/> plays the gate's phases and echoes at each cloud, the cloud
 /// its discharges.
 /// </summary>
 public static class JumpSounds
 {
-    /// <summary>The plugin's asset folder, its own sounds are in its Sounds subfolder; null if Pulsar did not provide it</summary>
+    /// <summary>The plugin's asset folder, its own sounds are in it; null if Pulsar did not provide it</summary>
     public static string AssetFolder;
 
     // A jump is heard at the clouds up to this far
@@ -75,7 +75,7 @@ public static class JumpSounds
         new Dictionary<MyJumpDriveDefinition, (MySoundPair, MySoundPair, MySoundPair)>();
 
     /// <summary>
-    /// The sound of each stage, a file in Assets/Sounds, and its emitter volume, balancing the stages against each other
+    /// The sound of each stage, a file in Assets, and its emitter volume, balancing the stages against each other
     /// </summary>
     private static readonly Dictionary<JumpSound, (string File, float Volume)> StageSounds = new Dictionary<JumpSound, (string, float)>
     {
@@ -149,7 +149,7 @@ public static class JumpSounds
             return MySoundPair.Empty;
         }
 
-        return FilePair(slot, Path.Combine(AssetFolder, "Sounds", file + ".wav"));
+        return FilePair(slot, Path.Combine(AssetFolder, file + ".wav"));
     }
 
     /// <summary>The lightning cut from the game's own (<see cref="LightningCuts"/>), made once in the plugin's storage</summary>
@@ -213,7 +213,7 @@ public static class JumpSounds
             {
                 Directory.CreateDirectory(folder);
                 foreach (var (file, source, start, length, highPass, fadeIn, fadeOut, taps) in EchoCuts.Cuts)
-                    LightningCuts.WriteWav(Path.Combine(folder, file + ".wav"), EchoCuts.Cut(LightningCuts.ReadWav(Path.Combine(AssetFolder, "Sounds", source + ".wav")), start, length, highPass, fadeIn, fadeOut, taps));
+                    LightningCuts.WriteWav(Path.Combine(folder, file + ".wav"), EchoCuts.Cut(LightningCuts.ReadWav(Path.Combine(AssetFolder, source + ".wav")), start, length, highPass, fadeIn, fadeOut, taps));
                 File.WriteAllText(stamp, EchoVersion);
                 Log.Info($"Echoes cut from the roar into {folder}");
             }

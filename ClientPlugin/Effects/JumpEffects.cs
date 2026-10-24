@@ -136,24 +136,20 @@ public static class JumpEffects
         Log.Debug($"Aborted: {grid.DisplayName} ({grid.EntityId})");
     }
 
-    // The HUD message of the camera's own jump (it replaces the vanilla countdown), until this long after the jump
-    private const double ExitUntil = 6;
+    // The HUD message of the camera's own jump (it replaces the vanilla countdown): the gate manifests until TransitFrom
+    // before the jump, the ship is in transit from then until TransitFrom after it (the smoke hides it then, and the
+    // world outside), and the jump is complete for CompleteFor more
+    private const double TransitFrom = 5;
+    private const double CompleteFor = 3;
 
-    // The HUD message: the gate manifests until the counter turns to 2 s, then the destination locks,
-    // the transit is complete from the jump sound on. Until the jump the seconds left are in brackets, rounded as the
-    // vanilla countdown rounds them (10 .. 1), down to 0 at the end; the label follows the number shown.
     private static string JumpMessage(double? t)
     {
-        if (t is not double since || since >= ExitUntil)
+        if (t is not double since || since >= TransitFrom + CompleteFor)
             return null;
-        if (since >= 0)
-            return "Transit Complete";
-
-        var seconds = Math.Round(-since);
-        return $"{(seconds > LockingFromSeconds ? "Manifesting Gate" : "Locking Destination")} ({seconds:0} s)";
+        if (since >= TransitFrom)
+            return "Jump Complete";
+        return since >= -TransitFrom ? "In Transit" : "Manifesting Gate";
     }
-
-    private const double LockingFromSeconds = 2;
 
     /// <summary>Seconds since the jump of the camera's grid (negative in the countdown), null when it is not jumping</summary>
     private static double? CameraJumpTime(double now)
@@ -534,10 +530,10 @@ public static class JumpEffects
                 if (Log.DebugEnabled && cloud.Kind == CloudKind.Origin && now - lastWrapLogAt >= 0.25)
                 {
                     lastWrapLogAt = now;
-                    Log.Debug($"Camera cloud: third person jumping along {ThirdPersonJumpsWith(cloud)}, open air {cloud.IsOpenAt(camera)}, intensity {cloud.CameraCloudIntensity(now):0.00}, {Vector3D.Distance(camera, cloud.Center):0} m from the cloud's centre, {NearestGrid(cloud, camera):0.0} m from the ship at t{now - cloud.JumpAt:+0.00;-0.00}");
+                    Log.Debug($"Camera cloud: outside view jumping along {OutsideViewJumpsWith(cloud)}, open air {CameraInOpenAir(cloud, camera)}, intensity {cloud.CameraCloudIntensity(now):0.00}, {Vector3D.Distance(camera, cloud.Center):0} m from the cloud's centre, {NearestGrid(cloud, camera):0.0} m from the ship at t{now - cloud.JumpAt:+0.00;-0.00}");
                 }
 
-                if (config.CameraOverlay && cloud.Kind != CloudKind.Provisional && ThirdPersonJumpsWith(cloud) && cloud.IsOpenAt(camera))
+                if (config.CameraOverlay && cloud.Kind != CloudKind.Provisional && OutsideViewJumpsWith(cloud) && CameraInOpenAir(cloud, camera))
                 {
                     var intensity = cloud.CameraCloudIntensity(now);
                     if (intensity > wrapped)
@@ -554,9 +550,10 @@ public static class JumpEffects
             // A camera wrapped in its own cloud sees nothing outside it, the other clouds neither. Its ship is in the fog with
             // it, which forms with the ship's cloud from the countdown's start: the ship's own cloud is not drawn for this
             // camera (its dense puffs at the hull would hide the ship, and let it come back as they faded), not even once
-            // the fog has cleared after the arrival (what is left of it would come in at once)
+            // the fog has cleared after the arrival (what is left of it would come in at once). A camera moved into a
+            // sealed room of the ship sees the cloud through the windows, as from the cockpit
             foreach (var cloud in Clouds)
-                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, ReplacedForCamera(cloud, wrappingCloud) ? 0f : 1f - wrapped, ref target);
+                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, ReplacedForCamera(cloud, wrappingCloud, camera) ? 0f : 1f - wrapped, ref target);
 
             // A camera inside a cloud (a cockpit, a camera block, the hangar, anyone standing in it) sees nothing outside
             // the smoke either. The third person camera in its void has the void's fog instead
@@ -566,7 +563,7 @@ public static class JumpEffects
             Cloud insideCloud = null;
             foreach (var cloud in Clouds)
             {
-                if (ReplacedForCamera(cloud, wrappingCloud))
+                if (ReplacedForCamera(cloud, wrappingCloud, camera))
                     continue;
 
                 var density = cloud.InsideDensity(camera, forward, now, out var distance);
@@ -603,6 +600,13 @@ public static class JumpEffects
             else
                 CameraCloud.Clear();
 
+            // The grids that do not jump go out of the view of a camera on board as the world outside does: for a camera
+            // in its fog as what is outside the void, for any other as its ship disappears in its cloud for those outside
+            var ownCloud = wrapped > 0.005f ? wrappingCloud : CameraCloudOnBoard();
+            var outsideCover = wrapped > 0.005f ? 1f - CameraCloud.OutsideTransmission(wrapped) : ownCloud?.ShipCover(now) ?? 0f;
+            var outsideRange = wrapped > 0.005f ? CameraCloud.Current.Radius : (ownCloud?.PortalRadius ?? 0) * 1.4;
+            OutsideGrids.Update(ownCloud, outsideCover, camera, outsideRange, now);
+
             // The flames and glares no smoke hides fade with the ship's cloud, and for a camera inside the smoke those
             // beyond its backdrop with the backdrop. For a wrapped camera they fade into its fog like everything in it,
             // its own ship's included
@@ -627,6 +631,7 @@ public static class JumpEffects
         else
         {
             CameraCloud.Clear();
+            OutsideGrids.Clear();
             Cover.Clear();
         }
 
@@ -644,9 +649,10 @@ public static class JumpEffects
         }
     }
 
-    // The ship's own cloud for the third person camera in the void: its fog stands in for it
-    private static bool ReplacedForCamera(Cloud cloud, Cloud wrappingCloud) =>
-        cloud == wrappingCloud || cloud.WrappedCamera && !cloud.Detached && ThirdPersonJumpsWith(cloud);
+    // The ship's own cloud for an outside view of it in the void: its fog stands in for it, while the camera is in the
+    // open air around the ship
+    private static bool ReplacedForCamera(Cloud cloud, Cloud wrappingCloud, Vector3D camera) =>
+        cloud == wrappingCloud || cloud.WrappedCamera && !cloud.Detached && OutsideViewJumpsWith(cloud) && CameraInOpenAir(cloud, camera);
 
     private static float TransitHidesSun(double? t)
     {
@@ -696,6 +702,7 @@ public static class JumpEffects
         Origins.Clear();
         Arrivals.Clear();
         CameraCloud.Clear();
+        OutsideGrids.Clear();
         Cover.Clear();
         SunVisibility = 1f;
         session = null;
@@ -706,18 +713,37 @@ public static class JumpEffects
     #region Camera
 
     /// <summary>
-    /// The camera that gets a <see cref="CameraCloud"/>: the third person camera of a ship controller on the jumping grid
-    /// group. It jumps with the ship but can be anywhere around it, outside the ship's cloud or where that cloud is thin.
-    /// Every other view of the ship (first person, camera blocks) is inside or behind the ship's own cloud, which masks
-    /// the jump; the spectator and cameras elsewhere are observers.
+    /// The cameras that get a <see cref="CameraCloud"/> while in the open air around the ship: the third person camera of
+    /// a ship controller on the jumping grid group, and a camera block on it. They jump with the ship and look at it from
+    /// outside, from anywhere around it, outside the ship's cloud or where that cloud is thin. First person views (a
+    /// cockpit, a camera in a sealed room) are inside the ship's own cloud, which masks the jump; the spectator and
+    /// cameras elsewhere are observers.
     /// </summary>
-    private static bool ThirdPersonJumpsWith(Cloud cloud)
+    private static bool OutsideViewJumpsWith(Cloud cloud)
     {
         var session = MySession.Static;
-        if (session == null || session.GetCameraControllerEnum() != MyCameraControllerEnum.ThirdPersonSpectator)
+        if (session == null)
+            return false;
+
+        if (session.CameraController is MyCameraBlock cameraBlock)
+            return cameraBlock.CubeGrid != null && cloud.GroupIds.Contains(cameraBlock.CubeGrid.EntityId);
+
+        if (session.GetCameraControllerEnum() != MyCameraControllerEnum.ThirdPersonSpectator)
             return false;
 
         return session.ControlledEntity?.Entity?.GetTopMostParent() is MyCubeGrid grid && cloud.GroupIds.Contains(grid.EntityId);
+    }
+
+    /// <summary>
+    /// Whether the camera is in the air the smoke reaches around the ship: a camera block by the cell its lens looks
+    /// into (the camera itself is inside its block), a camera in a sealed room or a block is not
+    /// </summary>
+    private static bool CameraInOpenAir(Cloud cloud, Vector3D camera)
+    {
+        if (MySession.Static?.CameraController is MyCameraBlock cameraBlock)
+            return cloud.IsOpenAt(cameraBlock.PositionComp.WorldAABB.Center + cameraBlock.WorldMatrix.Forward * cameraBlock.CubeGrid.GridSize);
+
+        return cloud.IsOpenAt(camera);
     }
 
     /// <summary>Whether the camera is teleported with the grid: the view of something on its group (a ship controller, a camera block)</summary>
@@ -766,6 +792,21 @@ public static class JumpEffects
 
         var sphere = grid.PositionComp.WorldVolume;
         return Vector3D.Dot(sphere.Center - camera, forward) + sphere.Radius;
+    }
+
+    /// <summary>The cloud around the camera's ship while the ship is in it: before the jump, or at the exit</summary>
+    private static Cloud CameraCloudOnBoard()
+    {
+        if (CameraGridId() is not long id)
+            return null;
+
+        foreach (var cloud in Clouds)
+        {
+            if (!cloud.Finished && !cloud.Detached && cloud.Kind != CloudKind.Provisional && cloud.GroupIds.Contains(id))
+                return cloud;
+        }
+
+        return null;
     }
 
     /// <summary>Whether the grid of the camera (the seat's or camera block's ship) reaches into a sphere</summary>

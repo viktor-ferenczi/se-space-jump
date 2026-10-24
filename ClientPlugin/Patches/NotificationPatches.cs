@@ -9,8 +9,8 @@ namespace ClientPlugin.Patches;
 
 /// <summary>
 /// The jump's HUD message names what the gate is doing instead of the vanilla "Ship will jump in N seconds":
-/// Manifesting Gate, Locking Destination, Transit Complete, with the seconds left until the jump (see
-/// JumpEffects.JumpMessage). An aborted jump shows "JUMP ABORTED!" instead of the reason.
+/// Manifesting Gate, In Transit, Jump Complete (see JumpEffects.JumpMessage). An aborted jump shows "JUMP ABORTED!"
+/// instead of the reason.
 /// </summary>
 [HarmonyPatch(typeof(MyHudNotifications), nameof(MyHudNotifications.Add), typeof(MyHudNotificationBase))]
 [SuppressMessage("ReSharper", "UnusedType.Global")]
