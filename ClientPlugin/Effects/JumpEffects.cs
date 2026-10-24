@@ -155,13 +155,15 @@ public static class JumpEffects
             return "Jump Complete";
 
         var left = (int)Math.Ceiling(TransitUntil - since);
-        return $"{(since >= TransitFrom ? "In Transit" : "Manifesting Gate")} ({left} s)";
+        return $"{(since >= TransitFrom ? "In Transit" : "Manifesting Gate")} ({left}s)";
     }
 
     /// <summary>
     /// Whether the local player is on or in a ship counting down to its jump but will not jump with it. The game counts
     /// as the ship's crew the characters in its grid group's box, and teleports only those seated in it: the children of
-    /// its blocks (MyGridJumpDriveSystem.GetJumpDriveText, MyCubeGrid.Teleport). Anyone else there stays behind
+    /// its blocks (MyGridJumpDriveSystem.GetJumpDriveText, MyCubeGrid.Teleport). Anyone else there stays behind, and so
+    /// does anyone who sat in it in this countdown and left the seat, wherever they went (out of a small ship's cockpit
+    /// the character stands outside the ship's box). Checked every frame: it follows the character in and out of seats
     /// </summary>
     private static bool LeftBehind()
     {
@@ -171,20 +173,40 @@ public static class JumpEffects
 
         var position = character.PositionComp.GetPosition();
         var seatedIn = (character.Parent as MyEntity)?.GetTopMostParent()?.EntityId;
+        var leftBehind = false;
         foreach (var cloud in Origins.Values)
         {
             if (cloud.Aborted || cloud.Detached || cloud.Finished || cloud.Grid == null || cloud.Grid.MarkedForClose)
                 continue;
 
             if (seatedIn is long id && cloud.GroupIds.Contains(id))
+            {
+                SeatedOn.Add(cloud);
                 continue;
+            }
 
-            if (cloud.Grid.GetPhysicalGroupAABB().Contains(position) != ContainmentType.Disjoint)
-                return true;
+            if (SeatedOn.Contains(cloud) || cloud.Grid.GetPhysicalGroupAABB().Contains(position) != ContainmentType.Disjoint)
+                leftBehind = true;
         }
 
-        return false;
+        SeatedOn.RemoveWhere(cloud => cloud.Aborted || cloud.Detached || cloud.Finished);
+        return leftBehind;
     }
+
+    // For the log: seconds since the jump of the ship the local player is left behind by (negative in the countdown)
+    private static double? LeftBehindJumpTime(double now)
+    {
+        foreach (var cloud in Origins.Values)
+        {
+            if (!cloud.Aborted && !cloud.Detached && !cloud.Finished)
+                return now - cloud.JumpAt;
+        }
+
+        return null;
+    }
+
+    // The countdowns the local character sat in a seat of the jumping group in
+    private static readonly HashSet<Cloud> SeatedOn = new HashSet<Cloud>();
 
     /// <summary>Seconds since the jump of the camera's grid (negative in the countdown), null when it is not jumping</summary>
     private static double? CameraJumpTime(double now)
@@ -319,7 +341,7 @@ public static class JumpEffects
         JumpSounds.Update();
         var jumpTime = CameraJumpTime(now);
         NotificationPatches.ShowJumpMessage(JumpMessage(jumpTime), jumpTime);
-        NotificationPatches.ShowJumpImminent(LeftBehind());
+        NotificationPatches.ShowJumpImminent(LeftBehind(), now, LeftBehindJumpTime(now));
         var markersOut = CameraMarkersHidden(now) >= 0.5f;
         if (markersOut != cameraMarkersOut)
         {
@@ -791,6 +813,7 @@ public static class JumpEffects
         cameraMarkersOut = false;
         lastUpdateAt = double.NaN;
         Origins.Clear();
+        SeatedOn.Clear();
         Arrivals.Clear();
         gate = null;
         VoidDarkness = 0f;
