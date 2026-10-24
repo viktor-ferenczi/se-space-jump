@@ -147,12 +147,13 @@ public sealed partial class Cloud
             bolts.Add(bolt);
 
             // The light it casts on the smoke and the ship swells and fades as a flash where it strikes, the bolt itself
-            // a crack in it: lit only while the bolt shows, the light went on and off within a frame or two
+            // a crack in it: lit only while the bolt shows, the light went on and off within a frame or two. The flash
+            // lasts about ten times as long, so it peaks lower: about as much light in all as the bolt's
             flashes.Add(new FlashPatch
             {
                 Local = Vector3D.Transform(bolt.Middle, MatrixD.Invert(frame)),
                 Radius = (float)bolt.Reach,
-                Peak = bolt.Brightness,
+                Peak = bolt.Brightness * FlashPatch.BoltShare * FlashPatch.PeakShare(random),
                 Phase = (float)(random.NextDouble() * Math.PI * 2),
                 StartsAt = now,
                 EndsAt = now + FlashPatch.Duration(random),

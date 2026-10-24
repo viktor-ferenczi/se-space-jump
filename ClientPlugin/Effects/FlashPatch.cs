@@ -20,6 +20,9 @@ internal sealed class FlashPatch
     private const double FadeTo = 1.6;
     private const float PeakFrom = 0.3f;
 
+    /// <summary>A bolt's flash peaks at this times PeakShare of the bolt's brightness</summary>
+    public const float BoltShare = 0.4f;
+
     /// <summary>How long a new flash lasts (s), at random</summary>
     public static double Duration(Random random) => FadeFrom + (FadeTo - FadeFrom) * random.NextDouble();
 
