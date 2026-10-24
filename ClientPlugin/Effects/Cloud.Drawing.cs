@@ -9,7 +9,12 @@ public sealed partial class Cloud
 {
     /// <summary>Draws the cloud and multiplies the transmittance of the view from the camera towards the sun through it</summary>
     /// <param name="visibility">0..1, how much of it shows: less for a camera wrapped in its own <see cref="CameraCloud"/></param>
-    public void Draw(double now, Vector3D cameraPosition, Vector3D sunDirection, float darkness, bool lightning, double maxDistance, float visibility, ref float sunTransmittance)
+    /// <param name="aboard">
+    /// Seen by the third person camera of its own ship, in the ship's smoke gate: without the layers that hide the ship
+    /// from those outside (the shroud at the hull and in front of it), its puffs thinner, so the ship shows through them
+    /// a little fogged
+    /// </param>
+    public void Draw(double now, Vector3D cameraPosition, Vector3D sunDirection, float darkness, bool lightning, double maxDistance, float visibility, ref float sunTransmittance, bool aboard = false)
     {
         if (Shape == null || !Started || Finished)
             return;
@@ -57,7 +62,7 @@ public sealed partial class Cloud
         // The gate is in the void: no sun there
         sunlight = Kind == CloudKind.Camera ? 0f : SmokeLight.Sunlight(center);
         var portalRadius = Math.Max(PortalRadius, 1.0);
-        var shroud = Shroud(now);
+        var shroud = aboard ? 0f : Shroud(now);
         PrepareBehindShip(cameraPosition, shroud);
         var hullLight = 1f - FrontLight(cameraPosition, shroud);
         var puffs = Shape.Puffs;
@@ -105,7 +110,8 @@ public sealed partial class Cloud
             var glow = (puff.Hull ? hullLight : 1f) * Glow(world, now) * FlashGlow * (1f - BehindShip(world)) * NearCamera(world, cameraPosition);
             var color = SmokeLight.Color(sunlight, (world - center) / portalRadius, Vector3D.Normalize(toPuff)) + (glow + abortFlash) * flashTint;
             var angle = puff.Angle + puff.Spin * (float)time;
-            alpha *= visibility;
+            // Aboard, a puff thickened past opaque is as thin as an opaque one
+            alpha = aboard ? Math.Min(alpha, 1f) * AboardOpacity * visibility : alpha * visibility;
             if (alpha < 0.003f)
                 continue;
 

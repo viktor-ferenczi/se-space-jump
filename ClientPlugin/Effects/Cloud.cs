@@ -67,6 +67,9 @@ public sealed partial class Cloud
     // The optical depth of the layers in front of the ship when they are fully drawn (see ShroudOpacity)
     private const float ShroudDepth = 9f;
 
+    // The share of its puffs' opacity the ship's cloud keeps for the third person camera of its own ship (Draw, aboard)
+    private const float AboardOpacity = 0.5f;
+
     // The sun's light at the cloud this frame (see SmokeLight)
     private float sunlight;
 

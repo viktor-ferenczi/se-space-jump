@@ -566,12 +566,18 @@ public static class JumpEffects
             var fogWrapped = cameraBlock ? wrapped : 0f;
 
             // A camera wrapped in its own cloud's fog or gate sees nothing outside it, the other clouds neither. Its ship is
-            // with it, which forms with the ship's cloud from the countdown's start: the ship's own cloud is not drawn for
-            // this camera (its dense puffs at the hull would hide the ship, and let it come back as they faded), not even
-            // once the fog has cleared after the arrival (what is left of it would come in at once). A camera moved into a
-            // sealed room of the ship sees the cloud through the windows, as from the cockpit
+            // with it. A camera block's fog forms with the ship's cloud from the countdown's start and stands in for it: the
+            // ship's own cloud is not drawn for it (its dense puffs at the hull would hide the ship, and let it come back as
+            // they faded), not even once the fog has cleared after the arrival (what is left of it would come in at once).
+            // The third person camera in its gate sees the ship's cloud at the departure and the exit as it forms and
+            // clears around the ship, without the layers that hide the ship from those outside (Cloud.Draw, aboard). A
+            // camera moved into a sealed room of the ship sees the cloud through the windows, as from the cockpit
             foreach (var cloud in Clouds)
-                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, ReplacedForCamera(cloud, wrappingCloud, camera) ? 0f : 1f - wrapped, ref target);
+            {
+                var replaced = ReplacedForCamera(cloud, wrappingCloud, camera);
+                var visibility = !replaced ? 1f - wrapped : cameraBlock ? 0f : 1f;
+                cloud.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, visibility, ref target, aboard: replaced);
+            }
             gate?.Draw(now, camera, sunDirection, config.Darkness, config.Lightning, MaxDistance, 1f, ref target);
 
             // A camera inside a cloud (a cockpit, a camera block, the hangar, anyone standing in it, the third person
@@ -637,8 +643,13 @@ public static class JumpEffects
             else
                 Cover.Update(Clouds, now, camera, gate != null ? wrappingCloud : null, default, backdropDistance, 1f - backdrop);
 
-            // In the void no sun shines on the ship: its discharges light it (see SunPatches)
-            VoidDarkness = Math.Min(1f, config.Darkness) * (gate?.Formation(now) ?? ownCloud?.Formation(now) ?? 0f);
+            // In the void no sun shines on the ship: its discharges light it (see SunPatches). Around an outside view (the
+            // third person camera's gate, a camera block's fog) the sun's light goes through the smoke as the view of the
+            // world outside does, so it is gone on the hull once the world is
+            var voidSmoke = gate != null ? 1f - CameraCloud.OutsideTransmission(gate.Formation(now))
+                : fogWrapped > 0.005f ? 1f - CameraCloud.OutsideTransmission(wrapped)
+                : ownCloud?.Formation(now) ?? 0f;
+            VoidDarkness = Math.Min(1f, config.Darkness) * voidSmoke;
             if (VoidDarkness > 0.005f && config.Lightning)
             {
                 if (fogWrapped > 0.005f)

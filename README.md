@@ -18,12 +18,13 @@ hull, its lights and the flames of its thrusters go dark in the smoke, so nothin
 In third person view the camera gets a smoke gate of its own while your ship jumps: it gathers around the camera a
 moment after the ship's cloud and goes wherever the camera goes, so you look out into the smoke as from a window of
 the ship. Your ship stays in view through a thin haze, with thick smoke all around beyond it and lightning flashing in
-it; nothing outside the gate shows. Move the camera into a sealed room of the ship and the gate is gone: you see the
+it; nothing outside the gate shows. The ship's own cloud shows too, thinner than from outside: you see it gather
+around the ship and, at the other end, clear away from it. Move the camera into a sealed room of the ship and the gate is gone: you see the
 ship's own cloud through the windows, as from the cockpit. Through a camera block on the hull the whole world turns
 into fog instead, which fades away once the ship is out at the other end.
 
 Inside the smoke the sun and the sky no longer light the ship: the purple flashes and the lightning do, and its own
-lights. Other ships that do not jump disappear in the smoke as the view closes, for anyone on board, and come back as
+lights. In third person the sunlight on the hull fades as the world outside does. Other ships that do not jump disappear in the smoke as the view closes, for anyone on board, and come back as
 it opens.
 
 The smoke is lit by the sun: in sunlight the outer edge of the cloud turns a dark grey, brighter on its sunny side and
