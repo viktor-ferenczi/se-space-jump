@@ -1,6 +1,7 @@
 using System;
 using VRage.Game;
 using VRageMath;
+using VRageRender;
 
 namespace ClientPlugin.Effects;
 
@@ -108,14 +109,32 @@ public sealed partial class Cloud
             // For a camera outside the portal the fog hugging the hull stays black in the discharges: lit, it would draw
             // the hull's outline where the hull cuts its billboards (the fog in front of the ship is lit instead)
             var glow = (puff.Hull ? hullLight : 1f) * Glow(world, now) * FlashGlow * (1f - BehindShip(world)) * NearCamera(world, cameraPosition);
-            var color = SmokeLight.Color(sunlight, (world - center) / portalRadius, Vector3D.Normalize(toPuff)) + (glow + abortFlash) * flashTint;
+            var smoke = SmokeLight.Color(sunlight, (world - center) / portalRadius, Vector3D.Normalize(toPuff));
             var angle = puff.Angle + puff.Spin * (float)time;
             // Aboard, a puff thickened past opaque is as thin as an opaque one
             alpha = aboard ? Math.Min(alpha, 1f) * AboardOpacity * visibility : alpha * visibility;
             if (alpha < 0.003f)
                 continue;
 
-            MyTransparentGeometry.AddPointBillboard(Materials[puff.Material], new Vector4(color * alpha, Math.Min(alpha, 1f)), world, radius, angle);
+            var color = smoke + (glow + abortFlash) * flashTint;
+            if (aboard || Kind == CloudKind.Camera)
+            {
+                // Seen aboard (and the gate's haze around it), the smoke at the ship is far from the camera, with the gate's
+                // shell farther out behind it:
+                // the renderer weighs them all alike (Billboards.hlsl, WeightedOITCendos) and averages a lit puff beside
+                // the ship with the dark shell behind it, but over the hull with nothing (the hull hides the shell). Its
+                // glow, blended in, lit the ship's silhouette with a hard edge. Added on top instead it is as bright over
+                // the hull as beside it; added up over a pixel where the blend averaged it, at AboardGlowShare
+                MyTransparentGeometry.AddPointBillboard(Materials[puff.Material], new Vector4(smoke * alpha, Math.Min(alpha, 1f)), world, radius, angle);
+                var light = (glow + abortFlash) * alpha * AboardGlowShare;
+                if (light > 0.002f)
+                    MyTransparentGeometry.AddPointBillboard(Materials[puff.Material], new Vector4(flashTint * light, 0f), world, radius, angle, blendType: MyBillboard.BlendTypeEnum.AdditiveTop);
+            }
+            else
+            {
+                MyTransparentGeometry.AddPointBillboard(Materials[puff.Material], new Vector4(color * alpha, Math.Min(alpha, 1f)), world, radius, angle);
+            }
+
             drawn++;
             alphaSum += alpha;
             glowSum += glow;

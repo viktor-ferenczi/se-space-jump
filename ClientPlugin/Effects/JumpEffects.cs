@@ -723,7 +723,10 @@ public static class JumpEffects
             // from a camera on board, after the sun's visibility below
             onBoard = ownCloud != null || gate != null || fogWrapped > 0.005f;
             lightsFromFog = fogWrapped > 0.005f;
-            lightsFrom = gate ?? ownCloud;
+            // In third person (the gate) no light is cast on the hull: the smoke's glow is drawn over the ship as beside it
+            // (Cloud.Draw, aboard), so the hull and the smoke light up together. Point lights lit the hull's faces brighter
+            // than the smoke in front of them, with hard edges (measured, #1435)
+            lightsFrom = gate == null ? ownCloud : null;
             voidDarknessScale = Math.Min(1f, config.Darkness);
 
             // The estimate counts puffs as discs of their own opacity; in optical depth (-ln of the transmittance) the
