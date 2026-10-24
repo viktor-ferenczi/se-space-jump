@@ -5,10 +5,11 @@ namespace ClientPlugin.Effects;
 // Hiding the HUD markers of the jumping ship in transit and at the arrival
 public sealed partial class Cloud
 {
-    // In transit (from 3 s before the jump to 2 s after it) the markers are gone: they flicker out in the second
-    // before it and back in in the second after it, around these times relative to the jump
-    private const double MarkersOutAt = -3.5;
-    private const double MarkersInAt = 2.5;
+    // In transit (from 3 s before the jump to 5 s after it) the markers are gone: they flicker out in the second
+    // before it and back in in the second after it, around these times relative to the jump. The HUD's transit runs
+    // from the start of one flicker to the start of the other (see JumpEffects.JumpMessage)
+    public const double MarkersOutAt = -3.5;
+    public const double MarkersInAt = 5.5;
 
     /// <summary>
     /// Whether a marker of the jumping group at this position is still where the ship left, not yet at the arrival: a
@@ -20,12 +21,12 @@ public sealed partial class Cloud
         Vector3D.DistanceSquared(position, arrival) >= Vector3D.DistanceSquared(position, detachedTranslation);
 
     // One flicker, in or out, lasts twice this
-    private const double MarkerFlickerHalf = 0.5;
+    public const double MarkerFlickerHalf = 0.5;
 
     /// <summary>
     /// 0..1, how likely the HUD markers of a grid of this cloud are hidden now (a flicker draws them against it frame by
     /// frame); 0 when the cloud has no say: the markers flicker out just before the transit (t-3), stay hidden through
-    /// it and flicker back in just after it (t+2) at the exit; an aborted jump brings them back at once
+    /// it and flicker back in just after it (t+5) at the exit; an aborted jump brings them back at once
     /// </summary>
     public float MarkersHidden(long gridId, double now)
     {
