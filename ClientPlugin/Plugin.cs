@@ -52,7 +52,7 @@ public class Plugin : IPlugin
         Log.Info($"Patched: {string.Join(", ", harmony.GetPatchedMethods().Select(m => $"{m.DeclaringType?.Name}.{m.Name}"))}");
     }
 
-    /// <summary>Called by Pulsar with the plugin's asset folder (the AssetFolder asset of BlackSmoke.xml)</summary>
+    /// <summary>Called by Pulsar with the plugin's asset folder (the AssetFolder asset of AbyssDrives.xml)</summary>
     // ReSharper disable once UnusedMember.Global
     public void LoadAssets(string folder)
     {
