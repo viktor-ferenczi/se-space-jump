@@ -28,74 +28,74 @@ public class Config : INotifyPropertyChanged
 
     #region User interface
 
-    public readonly string Title = "Black Smoke Jump";
+    public readonly string Title = Plugin.Title;
 
     [Separator("Jump effect")]
 
-    [Checkbox(description: "Replace the vanilla jump drive effect with the black smoke cloud")]
+    [Checkbox(label: "Enabled", description: "Replaces the vanilla jump drive effect with the black smoke cloud.")]
     public bool Enabled
     {
         get => enabled;
         set => SetField(ref enabled, value);
     }
 
-    [Slider(200f, 3000f, 100f, SliderAttribute.SliderType.Integer, description: "Smoke billboards per cloud, lower it on a slow GPU")]
+    [Slider(200f, 3000f, 100f, SliderAttribute.SliderType.Integer, label: "Smoke billboards", description: "How many smoke billboards make up one cloud.\nLower it if the effect is slow on your GPU.")]
     public int PuffBudget
     {
         get => puffBudget;
         set => SetField(ref puffBudget, value);
     }
 
-    [Slider(0.3f, 1.5f, 0.05f, SliderAttribute.SliderType.Float, description: "Opacity of the smoke")]
+    [Slider(0.3f, 1.5f, 0.05f, SliderAttribute.SliderType.Float, label: "Smoke opacity", description: "How thick and dark the smoke looks.")]
     public float Darkness
     {
         get => darkness;
         set => SetField(ref darkness, value);
     }
 
-    [Slider(0.5f, 4f, 0.1f, SliderAttribute.SliderType.Float, description: "Size of the clouds: bigger clouds can be seen from farther away")]
+    [Slider(0.5f, 4f, 0.1f, SliderAttribute.SliderType.Float, label: "Cloud size", description: "Sets the size of the clouds.\nBigger clouds can be seen from farther away.")]
     public float CloudScale
     {
         get => cloudScale;
         set => SetField(ref cloudScale, value);
     }
 
-    [Checkbox(description: "Lightning inside the cloud")]
+    [Checkbox(label: "Lightning", description: "Shows lightning inside the cloud.")]
     public bool Lightning
     {
         get => lightning;
         set => SetField(ref lightning, value);
     }
 
-    [Color(description: "Color of the lightning bolts and sparks")]
+    [Color(label: "Lightning color", description: "Sets the color of the lightning bolts and sparks.")]
     public Color LightningColor
     {
         get => lightningColor;
         set => SetField(ref lightningColor, value);
     }
 
-    [Color(description: "Color of the flashes lighting up the smoke and of its glowing regions")]
+    [Color(label: "Flash color", description: "Sets the color of the flashes that light up the smoke.\nThe glowing parts of the smoke take this color too.")]
     public Color FlashColor
     {
         get => flashColor;
         set => SetField(ref flashColor, value);
     }
 
-    [Checkbox(description: "Give your third person camera a smoke gate (a camera block on the hull, fog) while your ship jumps, so nothing outside the smoke shows")]
+    [Checkbox(label: "Camera smoke", description: "Wraps your third person camera in a smoke gate while your ship jumps.\nA camera block on the hull sees fog instead.\nNothing outside the smoke shows through either of them.")]
     public bool CameraOverlay
     {
         get => cameraOverlay;
         set => SetField(ref cameraOverlay, value);
     }
 
-    [Checkbox(description: "Hide a ship jumping in near you until its smoke cloud has formed")]
+    [Checkbox(label: "Hide arriving ships", description: "Hides a ship jumping in near you until its smoke cloud has formed.")]
     public bool HideArrivingGrids
     {
         get => hideArrivingGrids;
         set => SetField(ref hideArrivingGrids, value);
     }
 
-    [Slider(1f, 50f, 1f, SliderAttribute.SliderType.Float, description: "Clouds farther than this (km) are not drawn")]
+    [Slider(1f, 50f, 1f, SliderAttribute.SliderType.Float, label: "Draw distance (km)", description: "Clouds farther away than this are not drawn.")]
     public float MaxDistanceKm
     {
         get => maxDistanceKm;
@@ -104,7 +104,7 @@ public class Config : INotifyPropertyChanged
 
     [Separator("Sound")]
 
-    [Slider(0f, 1f, 0.05f, SliderAttribute.SliderType.Float, description: "The game's music while a jump is heard, as a share of its volume: lower it to hear the gate better")]
+    [Slider(0f, 1f, 0.05f, SliderAttribute.SliderType.Float, label: "Music during jumps", description: "How loud the game's music plays while a jump can be heard, as a share of its normal volume.\nLower it to hear the gate better.")]
     public float MusicDuringJump
     {
         get => musicDuringJump;

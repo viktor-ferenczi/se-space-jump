@@ -5,7 +5,7 @@ namespace ClientPlugin;
 
 internal static class Log
 {
-    private const string Prefix = Plugin.Name + ": ";
+    private const string Prefix = Plugin.Title + ": ";
 
     public static void Info(string message) => MyLog.Default.WriteLine(Prefix + message);
 
