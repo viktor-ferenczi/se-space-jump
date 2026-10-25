@@ -18,6 +18,13 @@ namespace ClientPlugin;
 // ReSharper disable once UnusedType.Global
 public class Plugin : IPlugin
 {
+    /// <summary>Shown to the player: settings screen title, log prefix</summary>
+    public const string Title = "Abyss Drives";
+
+    /// <summary>
+    /// Internal name from the plugin's first name, Black Smoke: Harmony id, config file (BlackSmoke.cfg), Storage folder
+    /// and the names of its materials and lights. Kept so the players' settings and cut sounds carry over.
+    /// </summary>
     public const string Name = "BlackSmoke";
     public static Plugin Instance { get; private set; }
     private SettingsGenerator settingsGenerator;
@@ -45,7 +52,7 @@ public class Plugin : IPlugin
         Log.Info($"Patched: {string.Join(", ", harmony.GetPatchedMethods().Select(m => $"{m.DeclaringType?.Name}.{m.Name}"))}");
     }
 
-    /// <summary>Called by Pulsar with the plugin's asset folder (the AssetFolder asset of BlackSmoke.xml)</summary>
+    /// <summary>Called by Pulsar with the plugin's asset folder (the AssetFolder asset of AbyssDrives.xml)</summary>
     // ReSharper disable once UnusedMember.Global
     public void LoadAssets(string folder)
     {

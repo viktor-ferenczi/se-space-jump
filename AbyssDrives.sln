@@ -10,7 +10,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution 
 		Clean.bat = Clean.bat
 		AGENTS.md = AGENTS.md
 		.github\copilot-instructions.md = .github\copilot-instructions.md
-		BlackSmoke.xml = BlackSmoke.xml
+		AbyssDrives.xml = AbyssDrives.xml
 		clean.sh = clean.sh
 		Version.Build.props = Version.Build.props
 	EndProjectSection
