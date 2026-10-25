@@ -74,7 +74,7 @@ public static class NotificationPatches
 
     /// <summary>
     /// Shows "Jump Imminent (Ns)" in the red of the abort while the local player is about to be left behind, the
-    /// seconds to the jump; null removes it (see JumpEffects.LeftBehind)
+    /// seconds to that ship's jump; null removes it (see JumpEffects.LeftBehindBy)
     /// </summary>
     public static void ShowJumpImminent(string text, double now, double? jumpTime)
     {
